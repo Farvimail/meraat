@@ -10,34 +10,43 @@
 
     <title>@yield("title")</title>
 
-    <!-- Fonts -->
+    <!-- DNS Prefetch -->
     <link rel="dns-prefetch" href="https://fonts.gstatic.com">
+
+    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css?family=Raleway:300,400,600" rel="stylesheet" type="text/css">
-    <link rel="preload" href="{{ asset('fonts/IRANSansWeb.0b5055a.woff2') }}" as="font" type="font/woff2" crossorigin="">
+
+    <!-- Font preload -->
+    <link rel="preload"
+          href="{{ asset('fonts/IRANSansWeb.0b5055a.woff2') }}"
+          as="font"
+          type="font/woff2"
+          crossorigin>
 
     <!-- Favicon -->
-    <link rel="apple-touch-icon" sizes="180x180" href="{{asset('/images/favicon/apple-touch-icon.png')}}">
-    <link rel="icon" type="image/png" sizes="32x32" href="{{asset('/images/favicon/favicon-32x32.png')}}">
-    <link rel="icon" type="image/png" sizes="16x16" href="{{asset('/images/favicon/favicon-16x16.png')}}">
-    <link rel="manifest" href="{{asset('/images/favicon/site.webmanifest')}}">
-
-    <link href="https://code.jquery.com/jquery-3.5.1.min.js" rel="preload" as="script" >
-    <link href="{{ asset('js/popper.js?v={{ time() }}') }}" rel="preload" as="script" defer>
-    <link href="{{ asset('js/app.js?v={{ time() }}') }}" rel="preload" as="script" defer>
-    <link href="{{ asset('js/ajax.js?v={{ time() }}') }}" rel="preload" as="script" defer>
-    <link href="{{ asset('js/timer.js?v={{ time() }}') }}" >
-
-    <!-- Scripts -->
-    <script src="https://code.jquery.com/jquery-3.5.1.min.js" rel="preload" as="script" ></script>
-    <script src="{{ asset('js/popper.js?v={{ time() }}') }}" rel="preload" as="script" defer></script>
-    <script src="{{ asset('js/app.js?v={{ time() }}') }}" rel="preload" as="script" defer></script>
-    <script src="{{ asset('js/ajax.js?v={{ time() }}') }}" rel="preload" as="script" defer></script>
-    <script src="{{ asset('js/timer.js?v={{ time() }}') }}" ></script>
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('images/favicon/apple-touch-icon.png') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('images/favicon/favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ asset('images/favicon/favicon-16x16.png') }}">
+    <link rel="manifest" href="{{ asset('images/favicon/site.webmanifest') }}">
 
     <!-- Styles -->
     <link href="{{ asset('css/app.css') }}" rel="stylesheet">
     <link href="{{ asset('css/custom.css') }}" rel="stylesheet">
     <link href="{{ asset('css/auth.css') }}" rel="stylesheet">
+
+    <!-- Preload scripts (ONLY preload, no execution) -->
+    <link rel="preload" href="https://code.jquery.com/jquery-3.5.1.min.js" as="script">
+    <link rel="preload" href="{{ asset('js/popper.js') }}" as="script">
+    <link rel="preload" href="{{ asset('js/app.js') }}" as="script">
+    <link rel="preload" href="{{ asset('js/ajax.js') }}" as="script">
+    <link rel="preload" href="{{ asset('js/timer.js') }}" as="script">
+
+    <!-- Scripts (actual execution) -->
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="{{ asset('js/popper.js') }}" defer></script>
+    <script src="{{ asset('js/app.js') }}" defer></script>
+    <script src="{{ asset('js/ajax.js') }}" defer></script>
+    <script src="{{ asset('js/timer.js') }}"></script>
 </head>
 <body>
 
