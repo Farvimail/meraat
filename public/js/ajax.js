@@ -66,7 +66,7 @@ $(document).ready(function(){
         id = id.substring(id.lastIndexOf('-')+1);
 
         $.ajax({
-            url: "https://localhost/public/present/"+target.split('-')[1],
+            url: "https://meraat.piqagram.ir/public/present/"+target.split('-')[1],
             method: 'get',
             data: {
                 _token: $('meta[name="csrf-token"]').attr('content'),
