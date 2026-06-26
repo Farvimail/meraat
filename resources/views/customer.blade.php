@@ -135,7 +135,7 @@ use Illuminate\Support\Facades\Auth;
                                     </div>
                                 </div>
                                 @if ( !empty(TimerController::check($item->customer_id)) )
-                                    <script src="{{ asset('js/timer.js') }}" rel="preload" as="script" ></script>
+                                    <!-- <script src="{{ asset('js/timer.js') }}" rel="preload" as="script" ></script> -->
                                     <script type="text/javascript">
                                         var dt{{$item->customer_id}};
                                         runTimer({{$item->customer_id}});
