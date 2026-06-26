@@ -1,0 +1,28 @@
+.col-striped div{
+    border-color:#c5c5c5 !important;
+}
+
+.col-striped .row .col{
+    margin:0 !important;
+}
+
+.col-striped .row .col{
+    border-left: solid 1px;
+}
+
+.col-striped .row {
+    border-bottom: solid 1px;
+}
+
+.col-striped .row:nth-child(1) .col{
+    border-top: solid 1px;
+}
+
+.col-striped .row .col:nth-child(1){
+    border-right: solid 1px;
+}
+
+.col-striped > .row {
+    border-bottom: solid 2px !important;
+    border-color:black !important;
+}

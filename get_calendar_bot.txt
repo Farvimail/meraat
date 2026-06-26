@@ -1,0 +1,107 @@
+all_day = document.querySelectorAll('.dayList > div');
+nextMonth = false;
+array = [];
+helper = []; /***/
+pre = document.querySelector('.miladi').innerText.split('-')[0];
+next = document.querySelector('.miladi').innerText.split('-')[1].split(' ')[1];
+var Mmonth,
+    package = 0; /******/
+
+function strToInt(name){
+    let res;
+    switch ( name.replace(/\s/g,'') ){
+        case 'January': res=1; break;
+        case 'February': res=2; break;
+        case 'March': res=3; break;
+        case 'April': res=4; break;
+        case 'May': res=5; break;
+        case 'June': res=6; break;
+        case 'July': res=7; break;
+        case 'August': res=8; break;
+        case 'September': res=9; break;
+        case 'October': res=10; break;
+        case 'November': res=11; break;
+        case 'December': res=12; break;
+    }
+    return res;
+}
+
+function strToIntFA(name){
+    let res;
+    switch ( name.replace(/\s/g,'') ){
+        case 'فروردین': res=1; break;
+        case 'اردیبهشت': res=2; break;
+        case 'خرداد': res=3; break;
+        case 'تیر': res=4; break;
+        case 'مرداد': res=5; break;
+        case 'شهریور': res=6; break;
+        case 'مهر': res=7; break;
+        case 'آبان': res=8; break;
+        case 'آذر': res=9; break;
+        case 'دی': res=10; break;
+        case 'بهمن': res=11; break;
+        case 'اسفند': res=12; break;
+    }
+    return res;
+}
+
+Array.from(all_day).forEach( b =>{
+
+    if ( b.getElementsByClassName('miladi')[0].innerText > 1 && !nextMonth )
+        Mmonth = pre;
+    else if (b.getElementsByClassName('miladi')[0].innerText == "01" ){
+        nextMonth = true;
+        Mmonth = next;
+    }
+
+
+    array.push({
+
+            'MonthName': Mmonth,
+            'id' : b.getElementsByClassName('miladi')[0].innerText+""+strToInt(Mmonth)+""+document.querySelector('.miladi').innerText.split('-')[1].split(' ')[2],
+            'Mday':b.getElementsByClassName('miladi')[0].innerText,
+            'Mmonth': strToInt(Mmonth),
+            'Myear' : document.querySelector('.miladi').innerText.split('-')[1].split(' ')[2],
+            'day':b.getElementsByClassName('jalali')[0].innerText,
+            'month': document.querySelector('.selectMonth').innerText,
+            'year' : document.querySelector('.selectYear').innerText,
+            'status':b.classList.contains('disabled')?3:b.getElementsByTagName('div')[0].className!==""?2:1
+
+    });
+});
+
+helper[++package] = array;
+
+/******* part two ********/
+
+php_array = "";
+function pte(value)
+{
+    var newValue="";
+
+    for (var i=0; i<value.length; i++ )
+    {
+        var ch=value.charCodeAt(i);
+
+        if ( ch >= 1776 && ch <= 1785 ) // For Persian digits.
+        {
+            var newChar = ch-1728;
+            newValue = newValue+String.fromCharCode(newChar);
+        }
+        else if( ch >= 1632 && ch <= 1641 ) // For Arabic & Unix digits.
+        {
+            var newChar=ch-1584;
+            newValue=newValue+String.fromCharCode(newChar);
+        }
+        else
+            newValue=newValue+String.fromCharCode(ch);
+    }
+
+    return newValue;
+}
+
+helper.forEach( (c,d) =>{
+    c.forEach( b =>{
+    php_array += "['m_month'=>'"+b.MonthName+"' ,'year'=>'"+b.Myear+"','month'=>'"+b.Mmonth+"','fa_date'=>'"+pte(b.day)+"/"+strToIntFA(b.month)+"/"+pte(b.year)+"','fa_month'=>'"+b.month+"','dmy'=>'"+b.Mday+b.Mmonth+b.Myear+"','status'=>'"+b.status+"','deleted'=>'0','disabled'=>'0','package'=>'"+d+"'],\n"
+    });
+})

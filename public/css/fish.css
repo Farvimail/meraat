@@ -1,0 +1,51 @@
+html{
+    direction: rtl;
+}
+
+.fish-header {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    padding-bottom: 55px;
+    border-bottom: dashed 2px;
+    margin-bottom: 65px;
+}
+
+p.text-center {
+    line-height: 230%;
+}
+
+.fish-logo{
+    padding:15px;
+}
+
+h5 {
+    line-height: 150%;
+}
+
+.col-md-3 h5{
+    display:flex;
+}
+
+.col-md-3.text-left h5{
+    float:left;
+}
+
+.col-md-3.text-right h5{
+    float:right;
+}
+
+table{
+    text-align: center;
+}
+
+.table-bordered, .table-bordered td, .table-bordered th{
+    border: solid 1px black !important;
+}
+
+@media print{
+    .table-bordered, .table-bordered td, .table-bordered th{
+        border: solid 1px black !important;
+    }
+}
+

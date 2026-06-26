@@ -1,0 +1,79 @@
+.col{
+    border-radius:0 !important;
+    background: transparent !important;
+}
+
+form:nth-child(even) .single-row,
+.multiple-row-even
+{
+    background: #fdfdfd;
+}
+
+form:nth-child(odd) .single-row,
+.multiple-row-odd
+{
+    background: rgb(181 181 181);
+}
+
+.bg-light-color{
+    background: #fdfdfd;
+}
+
+.bg-dark-color{
+    background: #eaeaea;
+}
+
+.arrow-left{
+    padding: 0.10rem 0 !important;
+    width: 80% !important;
+    direction: rtl !important;
+    text-align: right !important;
+    padding-right: .35rem !important;
+    background-position: left !important;
+    background-position: left 0.35rem center !important;
+}
+
+.bg-forgot {
+    background: #ec5854!important;
+    color: white;
+    font-weight: bold;
+}
+
+.bg-forgot {
+    border-bottom: solid 3px rgb(255 255 255 / 32%);
+}
+
+.text-strong {
+    font-weight: bold;
+}
+
+table{
+    font-size:20px !important;
+}
+
+.table-bordered, .table-bordered td, .table-bordered th{
+    border: solid 1px black !important;
+}
+
+tr td:nth-child(even) {
+    color: black;
+    font-weight: bold;
+}
+
+.fish-header h5 {
+    font-size: 1.2rem;
+}
+
+@media print{
+    .table-bordered, .table-bordered td, .table-bordered th{
+        border: solid 1px black !important;
+    }
+
+    .table a{
+        text-decoration: none !important;
+    }
+}
+
+form{
+    margin:0 !important;
+}

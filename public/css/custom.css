@@ -1,0 +1,146 @@
+body{
+    overflow-x:hidden;
+    /*background:#ececec !important;*/
+}
+
+body::before {
+    background:url(../images/background/bg2.png);
+    opacity: 0.3;
+    width:100%;
+    height:100%;
+    position:fixed;
+    content:"";
+    display:block;
+}
+
+input,
+textarea{
+    direction: rtl;
+    text-align: right;
+}
+
+select{
+    direction:rtl !important;
+}
+
+.form-control{
+    background-position: left 0.75rem center !important;
+}
+
+.card > .card-header {
+    font-size: 21px;
+    font-weight: bold;
+}
+
+.card, .card-header{
+    border-radius:0 !important;
+}
+
+.card .card-footer .btn-group{
+    direction: ltr;
+}
+
+.nav-tabs{
+    direction: rtl;
+}
+
+.nav-tabs .nav-link{
+    border-radius:0 !important;
+}
+
+.card .card-footer,
+.card .card-header{
+    direction: rtl;
+    text-align:right;
+}
+
+.digital-timer.cc_cursor {
+    /* padding-bottom: 8px; */
+    direction: ltr;
+    font-size: 26px;
+    font-weight: bold;
+}
+
+.card-body nav{
+    overflow: auto;
+}
+
+.nav-tabs {
+    border-bottom: 1px solid #dee2e6;
+    width: 320px;
+}
+
+
+.inverse-timer.cc_cursor {
+    width: 100%;
+    backdrop-filter: blur(12px);
+    padding-top: 15px;
+    padding-bottom: 15px;
+    color: #0075ff;
+    border-color: transparent;
+    /* background-image: radial-gradient(#f9f9f9 50%, #e3e3e3 100%); */
+    /* margin-left: -194px; */
+    text-align: center;
+    z-index: +999;
+    /* background-image: radial-gradient(black, transparent); */
+}
+
+.col-md-12 > .card > .card-body{
+    overflow-x:auto;
+}
+
+.bg-secondary {
+    background-color: #00000054!important;
+    /*border-radius: 50px !important;*/
+    padding: 0.35em .60em !important;
+}
+
+.card.text-white.bg-success {
+    border-style: dashed !important;
+    border-width: 2px;
+    border-color: #00933e;
+    /*border-radius: 8px !important;*/
+    /*background: #78d976 !important;*/
+}
+
+.card-footer{
+    padding-right: 0.50em !important;
+}
+
+.toast-header strong{
+    direction: rtl;
+    text-align: right;
+}
+
+.toast-body {
+    padding: 0.75rem;
+    word-wrap: break-word;
+    direction: rtl;
+    text-align: right;
+}
+
+button[id^="timer-"] {
+    height: 40px;
+    line-height: 0%;
+}
+
+.col{
+    flex: 0 0 16% !important;
+}
+
+.gold,
+.gold input,
+.gold h5,
+.gold .card-body,
+.gold span,
+.gold .card{
+    border-color: goldenrod;
+}
+
+#rewards{
+    background: goldenrod;
+}
+
+.bg-goldenrod{
+    background: goldenrod;
+}
