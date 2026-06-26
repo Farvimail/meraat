@@ -8,15 +8,12 @@
     <!-- CSRF Token -->
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <title>@yield("title")</title>
+    <title>@yield('title')</title>
 
-    <!-- DNS Prefetch -->
+    <!-- Fonts -->
     <link rel="dns-prefetch" href="https://fonts.gstatic.com">
-
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css?family=Raleway:300,400,600" rel="stylesheet" type="text/css">
-
-    <!-- Font preload -->
+    <link href="https://fonts.googleapis.com/css?family=Raleway:300,400,600" rel="stylesheet">
+    
     <link rel="preload"
           href="{{ asset('fonts/IRANSansWeb.0b5055a.woff2') }}"
           as="font"
@@ -34,19 +31,13 @@
     <link href="{{ asset('css/custom.css') }}" rel="stylesheet">
     <link href="{{ asset('css/auth.css') }}" rel="stylesheet">
 
-    <!-- Preload scripts (ONLY preload, no execution) -->
-    <link rel="preload" href="https://code.jquery.com/jquery-3.5.1.min.js" as="script">
-    <link rel="preload" href="{{ asset('js/popper.js') }}" as="script">
-    <link rel="preload" href="{{ asset('js/app.js') }}" as="script">
-    <link rel="preload" href="{{ asset('js/ajax.js') }}" as="script">
-    <link rel="preload" href="{{ asset('js/timer.js') }}" as="script">
-
-    <!-- Scripts (actual execution) -->
+    <!-- Scripts (clean + versioned) -->
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
-    <script src="{{ asset('js/popper.js') }}" defer></script>
-    <script src="{{ asset('js/app.js') }}" defer></script>
-    <script src="{{ asset('js/ajax.js') }}" defer></script>
-    <script src="{{ asset('js/timer.js') }}"></script>
+
+    <script src="{{ asset('js/popper.js') }}?v={{ filemtime(public_path('js/popper.js')) }}"></script>
+    <script src="{{ asset('js/app.js') }}?v={{ filemtime(public_path('js/app.js')) }}"></script>
+    <script src="{{ asset('js/ajax.js') }}?v={{ filemtime(public_path('js/ajax.js')) }}"></script>
+    <script src="{{ asset('js/timer.js') }}?v={{ filemtime(public_path('js/timer.js')) }}"></script>
 </head>
 <body>
 
