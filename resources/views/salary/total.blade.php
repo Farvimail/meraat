@@ -14,7 +14,7 @@
                         <h5><strong><input type="text" value="{{\App\Http\Controllers\FunctionsController::e2p("کد ثبت: 23")}}" style="border:none;font-weight: bold; width:300px"/></strong></h5>
                     </div>
                     <div class="col-md-6">
-                        <a href="/public/salary/table/month/{{$month_id}}"><img src="/public/images/logo/arm.jpg" class="fish-logo" width="100px" height="100px" /></a>
+                        <a href="/salary/table/month/{{$month_id}}"><img src="/images/logo/arm.jpg" class="fish-logo" width="100px" height="100px" /></a>
                         <h5><strong><input type="text" value="صندوق قرض الحسنه مرآت الانبیاء شهر فرخی" style="text-align:center; border:none;font-weight: bold; width:450px;"/></strong></h5>
                         <h5><strong><input type="text" value=" صورت وضعیت پرداخت حقوق و دستمزد کارکنان" style="text-align:center; border:none;font-weight: bold; width:450px;"/></strong></h5>
                         <h5><strong><input type="text" value="فیش حقوقی {{$fish_month}} {{\App\Http\Controllers\FunctionsController::e2p(explode("/",$find_today->fa_date)[2]%10000)}}" style="text-align:center; border:none;font-weight: bold; width:450px;"/></strong></h5>

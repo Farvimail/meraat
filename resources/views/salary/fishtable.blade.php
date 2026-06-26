@@ -16,7 +16,7 @@
                         <h5><strong><input type="text" value="{{\App\Http\Controllers\FunctionsController::e2p("کد ثبت: 23")}}" style="border:none;font-weight: bold; width:250px"/></strong></h5>
                     </div>
                     <div class="col-md-6">
-                        <a href="/public/salary/table/total/month/{{$month_id}}"><img src="/public/images/logo/arm.jpg" class="fish-logo" width="100px" height="100px" /></a>
+                        <a href="/salary/table/total/month/{{$month_id}}"><img src="/images/logo/arm.jpg" class="fish-logo" width="100px" height="100px" /></a>
                         <h5><strong><input type="text" value="صندوق قرض الحسنه مرآت الانبیاء شهر فرخی" style="text-align:center; border:none;font-weight: bold; width:450px;"/></strong></h5>
                         <h5><strong><input type="text" value=" صورت وضعیت پرداخت حقوق و دستمزد کارکنان" style="text-align:center; border:none;font-weight: bold; width:450px;"/></strong></h5>
                         <h5><strong><input type="text" value="فیش حقوقی {{$fish_month}} {{\App\Http\Controllers\FunctionsController::e2p(explode("/",$find_today->fa_date)[2]%10000)}}" style="text-align:center; border:none;font-weight: bold; width:450px;"/></strong></h5>
@@ -45,7 +45,7 @@
                         $sum+=$cost['activity_value']+$cost['point_value'];?>
                         <tr>
                             <th scope="row">{{\App\Http\Controllers\FunctionsController::e2p($index+1)}}</th>
-                            <td><a style="color:black" href="/public/salary/table/c/{{$item->customer_id}}/month/{{$month_id}}">{{$item->name}}</a></td>
+                            <td><a style="color:black" href="/salary/table/c/{{$item->customer_id}}/month/{{$month_id}}">{{$item->name}}</a></td>
                             <td>حقوق و حق الزحمه</td>
                             <td>{{isset($cost['activity_value'])&&isset($cost['point_value'])?\App\Http\Controllers\FunctionsController::e2p(number_format(((int)($cost['activity_value']+$cost['point_value']))))." ریال ":null}}</td>
                         </tr>

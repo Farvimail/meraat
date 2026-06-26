@@ -13,7 +13,7 @@
                         <h5><strong><input type="text" value="تاریخ گزارش: {{$fa_da}}" style="border:none;font-weight: bold; width:250px; text-align:right;"/></strong></h5>
                     </div>
                     <div class="col-md-6">
-                        <a href="/public/print/m/{{$mid}}/c/{{$cid}}/month/{{$month}}"><img src="/public/images/logo/arm.jpg" class="fish-logo" width="100px" height="100px" /></a>
+                        <a href="/print/m/{{$mid}}/c/{{$cid}}/month/{{$month}}"><img src="/images/logo/arm.jpg" class="fish-logo" width="100px" height="100px" /></a>
                         <h5><strong><input type="text" value="صندوق قرض الحسنه مرآت الانبیاء شهر فرخی" style="text-align:center; border:none;font-weight: bold; width:450px;"/></strong></h5>
                         <h5><strong><input type="text" value="گزارش ماهانه فعالیت {{$full_name}}" style="text-align:center; border:none;font-weight: bold; width:450px;"/></strong></h5>
                         <h5><strong><input type="text" value="{{$fish_month}} {{\App\Http\Controllers\FunctionsController::e2p(explode("/",$find_today->fa_date)[2]%10000)}}" style="text-align:center; border:none;font-weight: bold; width:450px;"/></strong></h5>

@@ -182,7 +182,7 @@ function finishTime(body)
 {
     return {
         body: body,
-        icon: "https://meraat.piqagram.ir/public/images/arm.jpg",
+        icon: "https://meraat.piqagram.ir/images/arm.jpg",
         image: "https://th.bing.com/th/id/OIP.fVzdKE2EPZzB5PiI1pvaFQHaHa?pid=ImgDet&rs=1",
         silent: false,
     }
@@ -194,7 +194,7 @@ function finishTime(body)
 function runTimer(id)
 {
     $.ajax({
-        url: "https://meraat.piqagram.ir/public/read/timer",
+        url: "https://meraat.piqagram.ir/read/timer",
         method: 'get',
         data: {
             _token: $('meta[name="csrf-token"]').attr('content'),
@@ -291,7 +291,7 @@ function runTimer(id)
             console.log(property);
             $.ajax({
                 type:'POST',
-                url: `https://meraat.piqagram.ir/public/upload/ajax`,
+                url: `https://meraat.piqagram.ir/upload/ajax`,
                 data: form_data,
                 contentType: false,
                 processData: false,
@@ -342,7 +342,7 @@ function runTimer(id)
             id = id.substring(id.lastIndexOf('n')+1);
 
             $.ajax({
-                url: 'https://meraat.piqagram.ir/public/delete/ajax',
+                url: 'https://meraat.piqagram.ir/delete/ajax',
                 method: 'GET',
                 data: {
                     _token: $('meta[name="csrf-token"]').attr('content'),
