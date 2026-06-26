@@ -22,17 +22,17 @@
     <link rel="manifest" href="{{asset('/images/favicon/site.webmanifest')}}">
 
     <link href="https://code.jquery.com/jquery-3.5.1.min.js" rel="preload" as="script" >
-    <link href="{{ asset('js/popper.js') }}" rel="preload" as="script" defer>
-    <link href="{{ asset('js/app.js') }}" rel="preload" as="script" defer>
-    <link href="{{ asset('js/ajax.js') }}" rel="preload" as="script" defer>
-    <link href="{{ asset('js/timer.js') }}" >
+    <link href="{{ asset('js/popper.js?v={{ time() }}') }}" rel="preload" as="script" defer>
+    <link href="{{ asset('js/app.js?v={{ time() }}') }}" rel="preload" as="script" defer>
+    <link href="{{ asset('js/ajax.js?v={{ time() }}') }}" rel="preload" as="script" defer>
+    <link href="{{ asset('js/timer.js?v={{ time() }}') }}" >
 
     <!-- Scripts -->
     <script src="https://code.jquery.com/jquery-3.5.1.min.js" rel="preload" as="script" ></script>
-    <script src="{{ asset('js/popper.js') }}" rel="preload" as="script" defer></script>
-    <script src="{{ asset('js/app.js') }}" rel="preload" as="script" defer></script>
-    <script src="{{ asset('js/ajax.js') }}" rel="preload" as="script" defer></script>
-    <script src="{{ asset('js/timer.js') }}" ></script>
+    <script src="{{ asset('js/popper.js?v={{ time() }}') }}" rel="preload" as="script" defer></script>
+    <script src="{{ asset('js/app.js?v={{ time() }}') }}" rel="preload" as="script" defer></script>
+    <script src="{{ asset('js/ajax.js?v={{ time() }}') }}" rel="preload" as="script" defer></script>
+    <script src="{{ asset('js/timer.js?v={{ time() }}') }}" ></script>
 
     <!-- Styles -->
     <link href="{{ asset('css/app.css') }}" rel="stylesheet">
