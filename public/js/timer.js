@@ -133,74 +133,68 @@ function e2p(n) {
         .replace(/\d/g, x => farsiDigits[x]);
 }
 
-function Interval(variable, totalMilliseconds, target, paused)
+function Interval(variable, dateString, target, paused)
 {
-    // ذخیره زمان شروع برای محاسبه دقیق
-    if (typeof window[variable+'_start'] === 'undefined') {
-        window[variable+'_start'] = Date.now();
-    }
-    let startTime = window[variable+'_start'];
-    let elapsed = 0;
-    
     function CustomerTimer()
     {
+        // Get today's date and time
+        /*var now = new Date().getTime();*/
+        let date = new Date;
+        let logicalTime = date.toLocaleString("en-US", {
+            timeZone: `Asia/Tehran`
+        });
+        //let now = new Date(logicalTime).getTime();
         let now = Date.now();
-        let remaining;
         
-        if (paused) {
-            // اگر متوقف شده، مقدار ثابت رو نمایش بده
-            remaining = totalMilliseconds;
-        } else {
-            // محاسبه زمان باقی‌مانده
-            let elapsedTime = now - startTime;
-            remaining = totalMilliseconds - elapsedTime;
+        // Find the distance between now and the count down date
+        var distance = paused?dateString:now-dateString;
+
+        // If the count down is finished, write some text
+        if (distance < 0) {
+            clearInterval(variable);
+            document.querySelector(target).innerHTML = "EXPIRED";
         }
-        
-        // اگر زمان تمام شد
-        if (remaining <= 0) {
-            clearInterval(window[variable]);
-            document.querySelector(target).innerHTML = "00 : 00' : 00\"";
-            return;
-        }
-        
-        // محاسبه ساعت، دقیقه، ثانیه
-        let hours = Math.floor(remaining / (1000 * 60 * 60));
-        let minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-        let seconds = Math.floor((remaining % (1000 * 60)) / 1000);
-        
-        // فرمت‌دهی با صفر جلو
-        hours = hours < 10 ? "0"+hours : hours;
-        minutes = minutes < 10 ? "0"+minutes : minutes;
-        seconds = seconds < 10 ? "0"+seconds : seconds;
-        
-        // نمایش با اعداد فارسی
-        let res = hours + " : " + minutes + "' : " + seconds + '"';
-        document.querySelector(target).innerHTML = e2p(res);
+
+        // Time calculations for days, hours, minutes and seconds
+        /*var days = Math.floor(distance / (1000 * 60 * 60 * 24));*/
+        var hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+        var seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+        // make binary number mode for display
+        /*days < 10 ? days = "0"+days : null;*/
+        hours < 10 ? hours = "0"+hours : null;
+        minutes < 10 ? minutes = "0"+minutes : null;
+        seconds < 10 ? seconds = "0"+seconds : null;
+
+        /*if ( hours == 4 && minutes == 01)
+        {
+
+        }*/
+
+        // Display the result in the element with id="demo"
+        let res = (  hours + " : " + minutes + "' : " + seconds + '"');
+        document.querySelector(target)
+            .innerHTML = e2p(res);
+
     }
-    
-    // اجرای اولیه
+
     CustomerTimer();
-    
-    // اگر متوقف نشده، شروع کن
-    if (!paused) {
-        if (window[variable]) {
-            clearInterval(window[variable]);
-        }
-        window[variable] = setInterval(CustomerTimer, 1000);
-    }
+    // Update the count down every 1 second
+    if ( !paused )
+    eval(variable+' = setInterval(CustomerTimer, 1000)');
+
 }
 
-// اصلاح تابع timerStatus
 function timerStatus(array)
 {
     array = JSON.parse(array);
-    if ( array.length > 0 )
+    if ( array.toString() != [] )
     {
-        // آخرین رکورد رو بگیر
-        let lastRecord = array[array.length - 1];
-        return lastRecord.pause == 1;
+        if ( array.length > 1 )
+            array = array.reverse();
+        return array[0].pause;
     }
-    return false;
 }
 
 function finishTime(body)
@@ -233,30 +227,26 @@ function runTimer(id)
                 b.show();
             });
             if ( JSON.parse(data).toString() != [] ){
-                console.log("Success: "+xhr.status);
-                
-                // محاسبه مجموع میلی‌ثانیه
-                let totalMs = sumParts(data);
-                
-                // شروع تایمر با مقدار محاسبه شده
-                Interval("dt"+id, totalMs, ".digital-timer-"+id, timerStatus(data));
-                
-                // اگر pause هست، تایمر رو متوقف کن
-                if (JSON.parse(data).reverse()[0].pause == 1) {
-                    clearInterval(eval("dt"+id));
-                }
-                
-                newToast('دریافت اطلاعات',
-                    'اطلاعات تایمر کاربر دریافت شد.',
-                    'ajax-success',
-                    'Mgh-App',
-                    '#08b100',
-                    '2000',
-                    'toasts-stack');
-                ToastQ('ajax-success').forEach( b=> {
-                    b.show();
-                });
-                delToast('ajax-success','3000');
+            console.log("Success: "+xhr.status);
+            Interval("dt"+id,
+                sumParts(data),
+                ".digital-timer-"+id,
+                timerStatus(data));
+            (JSON.parse(data).reverse()[0].pause==1)?clearInterval(eval("dt"+id)):null;
+            /* create Toast */
+            newToast('دریافت اطلاعات',
+                'اطلاعات تایمر کاربر دریافت شد.',
+                'ajax-success',
+                'Mgh-App',
+                '#08b100',
+                '2000',
+                'toasts-stack');
+            /* show Toast */
+            ToastQ('ajax-success').forEach( b=> {
+                b.show();
+            });
+            /* delete Toast */
+            delToast('ajax-success','3000');
             }
         },
         complete: function(xhr, textStatus) {
@@ -265,6 +255,7 @@ function runTimer(id)
     })
     .done(function( data ) {
         if ( console && console.log && data.toString() != [] ) {
+            /* create Toast */
             newToast('راه اندازی تایمر',
                 'تایمر کاربر راه اندازی شد.',
                 'ajax-done',
@@ -272,26 +263,32 @@ function runTimer(id)
                 '#007aff',
                 '2000',
                 'toasts-stack');
+            /* show Toast */
             ToastQ('ajax-done').forEach( b=> {
                 b.show();
             });
+            /* delete Toast */
             delToast('ajax-done','3000');
         }
     })
-    .fail(function( jqXHR, textStatus ) {
-        console.error( "Request failed: " + textStatus );
-        newToast('Timer problem!!',
-            'اشکال در انجام عمل به وجود آمده است '+textStatus,
-            'ajax-fail',
-            'Mgh-App',
-            '#007aff',
-            '2000',
-            'toasts-stack');
-        ToastQ('ajax-fail').forEach( b=> {
-            b.show();
+
+        .fail(function( jqXHR, textStatus ) {
+            console.error( "Request failed: " + textStatus );
+            /* create Toast */
+            newToast('Timer problem!!',
+                'اشکال در انجام عمل به وجود آمده است '+textStatus,
+                'ajax-fail',
+                'Mgh-App',
+                '#007aff',
+                '2000',
+                'toasts-stack');
+            /* show Toast */
+            ToastQ('ajax-fail').forEach( b=> {
+                b.show();
+            });
+            /* delete Toast */
+            delToast('ajax-fail','3000');
         });
-        delToast('ajax-fail','3000');
-    });
 }
 
     $.ajaxSetup({
