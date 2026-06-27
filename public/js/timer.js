@@ -125,8 +125,9 @@ function Interval(variable, dateString, target, paused)
         let logicalTime = date.toLocaleString("en-US", {
             timeZone: `Asia/Tehran`
         });
-        let now = new Date(logicalTime).getTime();
-
+        //let now = new Date(logicalTime).getTime();
+        let now = Date.now();
+        
         // Find the distance between now and the count down date
         var distance = paused?dateString:now-dateString;
 
