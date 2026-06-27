@@ -1,34 +1,16 @@
 function sumParts(array)
 {
     array = JSON.parse(array);
-    if ( array.length == 0 ) return 0;
-    
-    // مرتب‌سازی بر اساس تاریخ
-    array.sort((a, b) => new Date(a.date) - new Date(b.date));
-    
-    let totalMilliseconds = 0;
-    let startTime = null;
-    
-    for (let i = 0; i < array.length; i++) {
-        let currentDate = new Date(array[i].date).getTime();
-        
-        if (array[i].start == 1) {
-            // شروع کار
-            startTime = currentDate;
-        } else if (array[i].start == 0 && startTime !== null) {
-            // پایان کار - محاسبه اختلاف
-            totalMilliseconds += (currentDate - startTime);
-            startTime = null;
-        }
+    if ( array.toString() != [] )
+    {
+        sum = 0;
+        point = +1;
+        array.reverse().forEach(b =>{
+            b.start?point=+1:point=-1;
+            sum+= new Date(b.date)*point;
+        })
+        return sum>0?sum:sum*-1;
     }
-    
-    // اگر تایمر هنوز در حال کار هست (start بدون end)
-    if (startTime !== null) {
-        let now = Date.now();
-        totalMilliseconds += (now - startTime);
-    }
-    
-    return totalMilliseconds;
 }
 
 function ToastQ(cname)
