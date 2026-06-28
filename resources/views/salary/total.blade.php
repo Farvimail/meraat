@@ -20,7 +20,7 @@
                         <h5><strong><input type="text" value="فیش حقوقی {{$fish_month}} {{\App\Http\Controllers\FunctionsController::e2p(explode("/",$find_today->fa_date)[2]%10000)}}" style="text-align:center; border:none;font-weight: bold; width:450px;"/></strong></h5>
                     </div>
                     <div class="col-md-3 text-left">
-                        <h5><strong><input type="text" value="مجوز بانک مرکزی: {{\App\Http\Controllers\FunctionsController::e2p("99/386526")}}" style="border:none;font-weight: bold; width:300px; text-align:left;"/></strong></h5>
+                        <h5><strong><input type="text" value="مجوز بانک مرکزی: {{\App\Http\Controllers\FunctionsController::e2p("02/164467")}}" style="border:none;font-weight: bold; width:300px; text-align:left;"/></strong></h5>
                         <h5><strong><input type="text" value="تاریخ واریز: {{$fa_da}}" style="border:none;font-weight: bold; width:250px; text-align:left;"/></strong></h5>
                     </div>
                 </div>
