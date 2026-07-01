@@ -36,7 +36,8 @@
                     </tr>
                     </thead>
                     <tbody>
-                    <?php $sum = 0; ?>
+                    <?php $sum = 0; 
+                         $row = 1; ?>
                     @foreach(\App\Http\Controllers\AppendCustomerController::showManagerCustomers() as $index=>$item)
                     <?php
                         $cost = \App\Http\Controllers\SalaryController::getSum($month_id, $item->customer_id);
@@ -44,7 +45,7 @@
                         if (($cost['point_value']+$cost['activity_value']) !== 0):
                         $sum+=$cost['activity_value']+$cost['point_value'];?>
                         <tr>
-                            <th scope="row">{{\App\Http\Controllers\FunctionsController::e2p($index+1)}}</th>
+                            <th scope="row">{{\App\Http\Controllers\FunctionsController::e2p($row++)}}</th>
                             <td><a style="color:black" href="/salary/table/c/{{$item->customer_id}}/month/{{$month_id}}">{{$item->name}}</a></td>
                             <td>حقوق و حق الزحمه</td>
                             <td>{{isset($cost['activity_value'])&&isset($cost['point_value'])?\App\Http\Controllers\FunctionsController::e2p(number_format(((int)($cost['activity_value']+$cost['point_value']))))." ریال ":null}}</td>
