@@ -1,0 +1,141 @@
+# meraat.piqagram.ir - production stack (PHP 7.4 FPM + nginx + MariaDB 10.4)
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Differences from the development docker-compose.yml, on purpose:
+#
+#   * the application code is baked into the image (Dockerfile.prod) instead
+#     of bind-mounted, so what runs is exactly what was built;
+#   * the database is NOT seeded from inbox.sql - this stack runs against the
+#     existing live data, see deploy/import-db.sh to bring a dump in once;
+#   * storage/ and public/images/users are named volumes, so uploads, logs and
+#     the daily backups survive a rebuild;
+#   * nginx publishes on 127.0.0.1 by default and the nginx already running on
+#     the server keeps ports 80/443 and the TLS certificate in front of it.
+#
+# Requires Docker Compose 2.3.3+ for the top-level `name` field.
+name: meraat-prod
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    image: meraat-app:prod
+    working_dir: /var/www/html
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_DATABASE: ${DB_DATABASE:-inbox}
+      DB_USERNAME: ${DB_USERNAME:-meraat_user}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+      TZ: Asia/Tehran
+    volumes:
+      # Laravel reads its configuration from this file; it is never baked into
+      # the image. Read-only, so a compromised container cannot rewrite secrets.
+      - ./.env:/var/www/html/.env:ro
+      - meraat_storage:/var/www/html/storage
+      - meraat_uploads:/var/www/html/public/images/users
+    depends_on:
+      db:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  # There is no cron daemon in the container, so this service runs
+  # `php artisan schedule:run` once a minute. Laravel's daily database backup
+  # lives in app/Console/Kernel.php (db:backup at 03:00 Tehran time).
+  scheduler:
+    image: meraat-app:prod
+    working_dir: /var/www/html
+    command: ["sh", "-c", "while true; do php artisan schedule:run || true; sleep 60; done"]
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_DATABASE: ${DB_DATABASE:-inbox}
+      DB_USERNAME: ${DB_USERNAME:-meraat_user}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+      TZ: Asia/Tehran
+    volumes:
+      - ./.env:/var/www/html/.env:ro
+      - meraat_storage:/var/www/html/storage
+      - meraat_uploads:/var/www/html/public/images/users
+    depends_on:
+      app:
+        condition: service_started
+      db:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  web:
+    image: nginx:1.24-alpine
+    environment:
+      # Rendered into the vhost by the image's envsubst entrypoint.
+      SERVER_NAME: ${SERVER_NAME:-meraat.piqagram.ir}
+      # TLS terminates on the host nginx, so PHP is told every request is
+      # https and asset()/url() stay on https. Use `off` only when you expose
+      # this container directly over plain HTTP.
+      BACKEND_HTTPS: ${BACKEND_HTTPS:-on}
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8080}:80"
+    volumes:
+      - ./docker/nginx/prod.conf.template:/etc/nginx/templates/default.conf.template:ro
+      # Same volume as the app container: avatar uploads are written by PHP
+      # into app's copy of public/images/users, and nginx can only serve them
+      # if it sees the very same directory. Everything else under public/ is
+      # identical in both images, so nothing else needs mounting.
+      - meraat_uploads:/var/www/html/public/images/users:ro
+    depends_on:
+      - app
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null --timeout=5 http://127.0.0.1/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  db:
+    image: mariadb:10.4
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-inbox}
+      MYSQL_USER: ${DB_USERNAME:-meraat_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD must be set in .env}
+    volumes:
+      # No /docker-entrypoint-initdb.d mount here on purpose: this stack must
+      # never overwrite live data with inbox.sql.
+      - meraat_db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+volumes:
+  meraat_db:
+  meraat_storage:
+  meraat_uploads:

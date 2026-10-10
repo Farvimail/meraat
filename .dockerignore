@@ -1,0 +1,43 @@
+# Anything listed here is never sent to the docker daemon, so a production
+# build cannot leak a local .env or bake a stale compiled Blade view into the
+# image. `docker/` must stay in the context: both Dockerfiles COPY from it.
+.git
+.gitignore
+.gitattributes
+
+# --- secrets ---------------------------------------------------------------
+# .env carries APP_KEY and the database password; the container reads it from
+# a read-only bind mount at runtime instead.
+.env
+.env.*
+!.env.example
+inbox.sql
+
+# --- local-only tooling ----------------------------------------------------
+node_modules
+composer.phar
+.phpunit.result.cache
+.orig_manager3_hash.txt
+get_calendar_bot.txt
+
+# --- dependencies ----------------------------------------------------------
+# vendor/ is installed inside the image with `composer install` so the image
+# matches composer.lock instead of whatever happens to sit on this machine.
+vendor
+
+# --- runtime state ---------------------------------------------------------
+# storage/ and public/images/users are volumes at runtime. Compiled Blade
+# views, sessions and logs are host specific, so they must not be baked in.
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/app/backups/*
+
+# --- docs / deploy helpers -------------------------------------------------
+tests
+DOCKER.md
+DEPLOY.md
+deploy
+docker-compose.yml
+docker-compose.prod.yml

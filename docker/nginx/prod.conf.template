@@ -1,0 +1,75 @@
+# meraat.piqagram.ir - production vhost.
+#
+# The official nginx image renders every file in /etc/nginx/templates through
+# envsubst at startup, so ${SERVER_NAME} and ${BACKEND_HTTPS} below are filled
+# from the container environment. Only variables that are actually set in the
+# environment are substituted, so nginx's own $uri / $query_string variables
+# are left alone.
+server {
+    listen 80;
+    server_name ${SERVER_NAME};
+
+    # Laravel serves everything through public/
+    root /var/www/html/public;
+    index index.php index.html;
+
+    client_max_body_size 12m;
+    charset utf-8;
+
+    # --- compression ---------------------------------------------------------
+    # The app ships a 368 KB CSS and a 507 KB JS uncompressed, and the home
+    # page HTML is ~150 KB. gzip cuts roughly 70% of that.
+    gzip on;
+    gzip_comp_level 5;
+    gzip_min_length 512;
+    gzip_proxied any;
+    gzip_vary on;
+    gzip_types text/plain text/css text/xml application/json
+               application/javascript application/xml application/xml+rss
+               image/svg+xml;
+
+    # --- static assets -------------------------------------------------------
+    # The Blade layouts append ?v=<filemtime> to the CSS/JS URLs, so a long
+    # cache is safe: a rebuilt image changes the mtime and therefore the URL.
+    location ~* \.(?:css|js|jpe?g|png|gif|ico|svg|webp|woff2?|ttf|eot)$ {
+        expires 30d;
+        access_log off;
+        try_files $uri =404;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        fastcgi_pass app:9000;
+        fastcgi_index index.php;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param PATH_INFO $fastcgi_script_name;
+
+        # FunctionsController builds the avatar upload path as
+        #   $_SERVER['DOCUMENT_ROOT'] . '/public/images/users/...'
+        # so PHP has to see the PROJECT root even though nginx serves static
+        # files from public/. Without this the avatars are written to
+        # public/public/images/users/ and never displayed.
+        fastcgi_param DOCUMENT_ROOT /var/www/html;
+
+        # TLS normally ends on the nginx running on the host, which then
+        # proxies to this container over plain HTTP. PHP would therefore build
+        # http:// asset() URLs and the browser would block them as mixed
+        # content. Declaring the request secure here keeps asset()/url() on
+        # https. Set BACKEND_HTTPS=off when the container itself is exposed
+        # directly over plain HTTP (local testing).
+        #
+        # This line must stay AFTER `include fastcgi_params`, which sets HTTPS
+        # from $https - empty for a plain HTTP request.
+        fastcgi_param HTTPS ${BACKEND_HTTPS};
+
+        fastcgi_read_timeout 120;
+    }
+
+    location ~ /\.(?!well-known) {
+        deny all;
+    }
+}

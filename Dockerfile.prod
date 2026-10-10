@@ -1,0 +1,72 @@
+# meraat.piqagram.ir - production image (Laravel 5.6 on PHP 7.4 FPM)
+#
+# Unlike the development Dockerfile this one bakes the application code into
+# the image, so the server never bind-mounts the working tree. That means:
+#
+#   * a deploy is a rebuild -> the running code is exactly what was built
+#   * OPcache with validate_timestamps=0 is safe (files never change under it)
+#   * no Windows/Unix path or permission surprises from a mounted tree
+#
+# vendor/ is intentionally NOT copied in (see .dockerignore): it is resolved
+# here with `composer install` so it always matches composer.lock.
+FROM php:7.4-fpm
+
+# php:7.4-fpm is built on Debian bullseye, which has moved to the Debian
+# archive: the live bullseye-security index still advertises package versions
+# whose files were deleted (404), so apt fails there. Pointing apt at the
+# frozen archive keeps the index and the pool consistent. Check-Valid-Until
+# must be disabled because the archive's Release files are expired by design.
+RUN set -eux; \
+    printf 'deb http://archive.debian.org/debian bullseye main\ndeb http://archive.debian.org/debian-security bullseye-security main\n' > /etc/apt/sources.list; \
+    printf 'Acquire::Check-Valid-Until "false";\nAcquire::Retries "3";\n' > /etc/apt/apt.conf.d/99debian-archive; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        libpng-dev libjpeg62-turbo-dev libfreetype6-dev libzip-dev libonig-dev unzip mariadb-client; \
+    docker-php-ext-configure gd --with-freetype --with-jpeg; \
+    docker-php-ext-install -j"$(nproc)" pdo_mysql mbstring exif gd zip bcmath opcache; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
+
+# composer is used at build time to produce vendor/.
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+COPY docker/php/app.ini /usr/local/etc/php/conf.d/zz-app.ini
+COPY docker/php/fpm-pool.conf /usr/local/etc/php-fpm.d/zz-pool.conf
+
+WORKDIR /var/www/html
+
+# Dependencies first: a code-only change then reuses this (slow) layer.
+COPY composer.json composer.lock ./
+RUN composer install \
+        --no-dev --no-interaction --no-progress --prefer-dist \
+        --optimize-autoloader --no-scripts
+
+# Application code. vendor/ is excluded by .dockerignore, so this layer cannot
+# overwrite the dependencies resolved above.
+COPY . .
+
+# Now that artisan and the whole tree are present, finish the autoloader and
+# let Laravel discover its packages. --no-scripts above was needed because
+# package:discover requires the application code.
+RUN composer dump-autoload --no-dev --optimize \
+ && php artisan package:discover --ansi \
+ && mkdir -p \
+        storage/app/backups \
+        storage/framework/cache \
+        storage/framework/sessions \
+        storage/framework/views \
+        storage/logs \
+        bootstrap/cache \
+ && chown -R www-data:www-data storage bootstrap/cache
+
+# The code is immutable at runtime, so `config:cache` could be baked in here
+# for a small win - except that it would freeze the values of this machine's
+# .env into the image. config/ is left uncached and read from the mounted
+# .env on every boot instead.
+COPY docker/entrypoint.prod.sh /usr/local/bin/meraat-entrypoint
+RUN chmod +x /usr/local/bin/meraat-entrypoint
+
+EXPOSE 9000
+
+ENTRYPOINT ["meraat-entrypoint"]
+CMD ["php-fpm"]
