@@ -16,6 +16,10 @@ FROM php:7.4-fpm
 # whose files were deleted (404), so apt fails there. Pointing apt at the
 # frozen archive keeps the index and the pool consistent. Check-Valid-Until
 # must be disabled because the archive's Release files are expired by design.
+# How many translation units to compile in parallel. This image is built on a
+# shared host with 4 cores but under 1 GB of spare RAM and no swap, so the
+# build is pinned low there with --build-arg BUILD_JOBS=1. Unset = all cores.
+ARG BUILD_JOBS
 RUN set -eux; \
     printf 'deb http://archive.debian.org/debian bullseye main\ndeb http://archive.debian.org/debian-security bullseye-security main\n' > /etc/apt/sources.list; \
     printf 'Acquire::Check-Valid-Until "false";\nAcquire::Retries "3";\n' > /etc/apt/apt.conf.d/99debian-archive; \
@@ -23,7 +27,7 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends \
         libpng-dev libjpeg62-turbo-dev libfreetype6-dev libzip-dev libonig-dev unzip mariadb-client; \
     docker-php-ext-configure gd --with-freetype --with-jpeg; \
-    docker-php-ext-install -j"$(nproc)" pdo_mysql mbstring exif gd zip bcmath opcache; \
+    docker-php-ext-install -j"${BUILD_JOBS:-$(nproc)}" pdo_mysql mbstring exif gd zip bcmath opcache; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
 

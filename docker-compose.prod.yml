@@ -25,6 +25,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.prod
+      args:
+        BUILD_JOBS: ${BUILD_JOBS:-}
     image: meraat-app:prod
     working_dir: /var/www/html
     mem_limit: 768m
