@@ -13,6 +13,10 @@
 #   * nginx publishes on 127.0.0.1 by default and the nginx already running on
 #     the server keeps ports 80/443 and the TLS certificate in front of it.
 #
+# Every service carries a mem_limit: the host runs several other sites and has
+# very little memory to spare, so meraat must be the container that gets OOM
+# killed if anything ever runs away, never one of its neighbours.
+#
 # Requires Docker Compose 2.3.3+ for the top-level `name` field.
 name: meraat-prod
 
@@ -23,6 +27,7 @@ services:
       dockerfile: Dockerfile.prod
     image: meraat-app:prod
     working_dir: /var/www/html
+    mem_limit: 768m
     environment:
       DB_HOST: db
       DB_PORT: "3306"
@@ -52,6 +57,7 @@ services:
   scheduler:
     image: meraat-app:prod
     working_dir: /var/www/html
+    mem_limit: 256m
     command: ["sh", "-c", "while true; do php artisan schedule:run || true; sleep 60; done"]
     environment:
       DB_HOST: db
@@ -78,6 +84,7 @@ services:
 
   web:
     image: nginx:1.24-alpine
+    mem_limit: 128m
     environment:
       # Rendered into the vhost by the image's envsubst entrypoint.
       SERVER_NAME: ${SERVER_NAME:-meraat.piqagram.ir}
@@ -111,9 +118,17 @@ services:
 
   db:
     image: mariadb:10.4
+    mem_limit: 640m
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_general_ci
+      # The database here is tiny (22 tables, ~12k rows) and the host has very
+      # little RAM, so the defaults are trimmed: a smaller buffer pool, no
+      # performance_schema, and a connection ceiling sized for one company.
+      - --innodb-buffer-pool-size=128M
+      - --performance-schema=0
+      - --max-connections=40
+      - --table-open-cache=200
     environment:
       MYSQL_DATABASE: ${DB_DATABASE:-inbox}
       MYSQL_USER: ${DB_USERNAME:-meraat_user}
