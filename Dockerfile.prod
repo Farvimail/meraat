@@ -60,6 +60,11 @@ WORKDIR /var/www/html
 
 # Dependencies first: a code-only change then reuses this (slow) layer.
 COPY composer.json composer.lock ./
+
+# The root package lists database/seeds and database/factories as classmap
+# paths, and composer scans those while it generates the autoloader - so they
+# have to exist before install runs, not just before the code is copied.
+COPY database/ ./database/
 RUN composer install \
         --no-dev --no-interaction --no-progress --prefer-dist \
         --optimize-autoloader --no-scripts
