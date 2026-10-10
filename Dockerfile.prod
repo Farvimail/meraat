@@ -11,17 +11,36 @@
 # here with `composer install` so it always matches composer.lock.
 FROM php:7.4-fpm
 
-# php:7.4-fpm is built on Debian bullseye, which has moved to the Debian
-# archive: the live bullseye-security index still advertises package versions
-# whose files were deleted (404), so apt fails there. Pointing apt at the
-# frozen archive keeps the index and the pool consistent. Check-Valid-Until
-# must be disabled because the archive's Release files are expired by design.
-# How many translation units to compile in parallel. This image is built on a
-# shared host with 4 cores but under 1 GB of spare RAM and no swap, so the
-# build is pinned low there with --build-arg BUILD_JOBS=1. Unset = all cores.
-ARG BUILD_JOBS
+# How many translation units to compile in parallel. The deployment host is
+# shared and has four cores but under 1 GB of spare memory and no swap, so the
+# build is pinned low there (BUILD_JOBS=1). Empty = use every core.
+ARG BUILD_JOBS=
+
+# Which Debian mirror to pull the build dependencies from. bullseye is an
+# archived release, so archive.debian.org is the canonical source - but this
+# host measures about 0.6 KB/s against it, which turns an 11 MB package index
+# into a multi-hour download. Both mirrors are therefore build args, forwarded
+# from .env by docker-compose.prod.yml:
+#
+#   DEBIAN_MIRROR          empty -> archive.debian.org (the dev default)
+#   DEBIAN_SECURITY_MIRROR empty -> no security suite at all
+#
+# Dropping the security suite is deliberate and safe here: every package
+# installed below (the GD/libzip/libonig headers, unzip and mariadb-client)
+# lives in main.
+ARG DEBIAN_MIRROR=
+ARG DEBIAN_SECURITY_MIRROR=
+
+# php:7.4-fpm is built on Debian bullseye. Check-Valid-Until has to be disabled
+# because the archive's Release files are expired by design.
 RUN set -eux; \
-    printf 'deb http://archive.debian.org/debian bullseye main\ndeb http://archive.debian.org/debian-security bullseye-security main\n' > /etc/apt/sources.list; \
+    main="${DEBIAN_MIRROR:-http://archive.debian.org/debian}"; \
+    sec="${DEBIAN_SECURITY_MIRROR-http://archive.debian.org/debian-security}"; \
+    printf 'deb %s bullseye main\n' "$main" > /etc/apt/sources.list; \
+    if [ -n "$sec" ]; then \
+        printf 'deb %s bullseye-security main\n' "$sec" >> /etc/apt/sources.list; \
+    fi; \
+    cat /etc/apt/sources.list; \
     printf 'Acquire::Check-Valid-Until "false";\nAcquire::Retries "3";\n' > /etc/apt/apt.conf.d/99debian-archive; \
     apt-get update; \
     apt-get install -y --no-install-recommends \

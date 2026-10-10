@@ -27,6 +27,8 @@ services:
       dockerfile: Dockerfile.prod
       args:
         BUILD_JOBS: ${BUILD_JOBS:-}
+        DEBIAN_MIRROR: ${DEBIAN_MIRROR:-}
+        DEBIAN_SECURITY_MIRROR: ${DEBIAN_SECURITY_MIRROR-}
     image: meraat-app:prod
     working_dir: /var/www/html
     mem_limit: 768m
