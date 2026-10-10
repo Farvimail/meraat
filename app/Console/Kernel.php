@@ -24,8 +24,11 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        // $schedule->command('inspire')
-        //          ->hourly();
+        // Daily database dump. config/app.php sets the timezone to
+        // Asia/Tehran, so this runs at 03:00 Tehran time. The `scheduler`
+        // service in docker-compose.yml calls `schedule:run` every minute,
+        // because there is no cron daemon inside the container.
+        $schedule->command('db:backup')->dailyAt('03:00');
     }
 
     /**

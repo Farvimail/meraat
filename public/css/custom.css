@@ -11,6 +11,10 @@ body::before {
     position:fixed;
     content:"";
     display:block;
+    /* این لایه فقط واترمارک تزئینی است؛ بدون این خط تمام صفحه را
+       می‌پوشاند و کلیک/تایپ روی هر عنصری که position ندارد (مثل کارت
+       ورود) را می‌بلعد. */
+    pointer-events:none;
 }
 
 input,

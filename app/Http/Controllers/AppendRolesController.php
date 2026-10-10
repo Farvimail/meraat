@@ -51,6 +51,13 @@ class AppendRolesController extends Controller
 
     public static function selectedManagerRole($month_id, $id)
     {
+        static $cache = array();
+        $key = $month_id.'|'.$id;
+
+        if (array_key_exists($key, $cache)) {
+            return $cache[$key];
+        }
+
         $roles = DB::table('tbl_roles')
             ->join('tbl_append_roles','tbl_roles.id','=','tbl_append_roles.role_id')
             ->join('tbl_customer_roles','tbl_roles.id','=','tbl_customer_roles.role_id')
@@ -61,7 +68,7 @@ class AppendRolesController extends Controller
             ])->first();
 
 
-        return $roles;
+        return $cache[$key] = $roles;
     }
     /**
      * Show the form for editing the specified resource.

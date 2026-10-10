@@ -95,9 +95,63 @@ Route::get('/rewards/delete/id/{id}', 'AppendRewardsController@destroy');
 Route::get('/roles/delete/id/{id}', 'RolesController@destroy');
 Route::get('/customers/delete/id/{id}', 'CustomerController@destroy');
 
+/*
+|--------------------------------------------------------------------------
+| کارمندان: آرشیو و گزارش
+|--------------------------------------------------------------------------
+| آرشیو = انتقال کارمند به لیست غیرفعال‌ها (users.archived_at) بدون حذفِ
+| داده‌ها؛ بازگردانی دوباره فعالش می‌کند. گزارش، صفحهٔ کامل سوابق یک
+| کارمند است (ورود، اولین/آخرین فعالیت، حضور و غیبت، ساعت‌ها و دریافتی‌ها).
+| برخلاف سایر مسیرهای این بخش، هر سه پشت گارد مدیر هستند.
+*/
+Route::get('/customers/archive/id/{id}', 'CustomerController@archive')
+    ->name('customer.archive')->middleware('auth:manager');
+Route::get('/customers/restore/id/{id}', 'CustomerController@restore')
+    ->name('customer.restore')->middleware('auth:manager');
+Route::get('/customers/report/id/{id}', 'CustomerController@report')
+    ->name('customer.report')->middleware('auth:manager');
+
 
 Route::get('/days', 'CalendarController@show');
 
 Route::post('/upload/ajax', 'FunctionsController@uploadAjax')->name('upload.ajax');
 
 Route::get('/delete/ajax', 'PhotoController@destroy')->name('delete.ajax');
+
+/*
+|--------------------------------------------------------------------------
+| Database backup (management panel)
+|--------------------------------------------------------------------------
+| Manual backup from the management panel. The automatic daily run is
+| declared in app/Console/Kernel.php. Unlike most routes in this file these
+| two are behind a guard: a dump of the whole database must not be reachable
+| anonymously.
+|
+| `real.month` هم می‌گوید وقتی مدیر یک ماه گذشته را فعال کرده، بکاپ‌گیری
+| دستی متوقف شود؛ دامپ کل پایگاه داده به ماه کاریِ فعال مربوط نیست و نباید
+| اشتباهی زیر عنوان «امروزِ سامانه» گرفته شود. اجرای خودکار روزانه (کنسول و
+| بدون نشست) از این محافظ اثری نمی‌گیرد.
+*/
+Route::post('/backup/create', 'BackupController@create')
+    ->name('backup.create')
+    ->middleware(['auth:manager,admin', 'real.month']);
+
+Route::get('/backup/download/{file}', 'BackupController@download')
+    ->name('backup.download')
+    ->middleware(['auth:manager,admin', 'real.month']);
+
+/*
+|--------------------------------------------------------------------------
+| تاریخ فعال سامانه (پنل مدیریت)
+|--------------------------------------------------------------------------
+| روی سرور نمی‌توان ساعت سیستم را برای کار روی ماه‌های قبل عوض کرد، پس مدیر
+| از نوار بالای پنل یک ماه یا روز را فعال می‌کند و در نشست خودش ذخیره می‌شود.
+| چون فقط روی «امروزِ سامانه» اثر دارد، مثل بکاپ پشت گارد است.
+*/
+Route::post('/panel/date', 'PanelDateController@set')
+    ->name('panel.date.set')
+    ->middleware('auth:manager,admin');
+
+Route::post('/panel/date/reset', 'PanelDateController@reset')
+    ->name('panel.date.reset')
+    ->middleware('auth:manager,admin');

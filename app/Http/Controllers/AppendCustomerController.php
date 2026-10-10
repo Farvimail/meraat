@@ -51,27 +51,59 @@ class AppendCustomerController extends Controller
      * @param  \App\AppendCustomer  $appendCustomer
      * @return \Illuminate\Http\Response
      */
-    public static function showManagerCustomers()
+    /**
+     * فهرست کارمندان مدیر برای کارت‌های پنل.
+     *
+     * حالت پیش‌فرض فهرست «فعال» است؛ همهٔ فراخوان‌های موجود (کارت‌های
+     * کارمند، تقویم‌ها، لیست‌های انتخاب کارمند) همین را می‌خواهند و با
+     * ستون archived_at هم فیلتر می‌شوند تا کارمند آرشیوشده دیگر تایمر
+     * و کارت فعال نداشته باشد. با true، کارمندان آرشیوشده برمی‌گردند
+     * تا بخش «آرشیو کارمندها» همان کارت‌ها را با وضعیت غیرفعال نشان دهد.
+     */
+    public static function showManagerCustomers($archived = false)
     {
+        // Memoised: several sections of the same page render the same list.
+        static $cached = array();
+
+        $key = $archived ? 'archived' : 'active';
+
+        if (array_key_exists($key, $cached)) {
+            return $cached[$key];
+        }
+
         //find out what mannager is online
         $manager_id = self::managerId();
         //find manager's customers
-        $customers = DB::table('tbl_append_customer')
+        $query = DB::table('tbl_append_customer')
             ->join('users','tbl_append_customer.customer_id','=','users.id')
             ->join('tbl_timer',  'users.id', '=', 'tbl_timer.customer_id')
-            ->where('manager_id', 3)
+            ->where('manager_id', 3);
+
+        if ($archived) {
+            $query->whereNotNull('users.archived_at');
+        } else {
+            $query->whereNull('users.archived_at');
+        }
+
+        $customers = $query
             ->groupBy('tbl_timer.customer_id')
             ->select('*',DB::raw('count(tbl_timer.customer_id) as "activity"'))
             ->orderBy('activity', 'desc')
             ->get();
 
             // dd($customers);
-        return $customers;
+        return $cached[$key] = $customers;
     }
 
     public static function showCustomer($id)
     {
-        return DB::table('users')
+        static $cache = array();
+
+        if (array_key_exists($id, $cache)) {
+            return $cache[$id];
+        }
+
+        return $cache[$id] = DB::table('users')
             ->where('id', $id)
             ->first();
     }

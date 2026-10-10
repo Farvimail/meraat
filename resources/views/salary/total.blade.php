@@ -41,7 +41,7 @@
                         ?>
                     @endforeach
                     <tr>
-                        <th scope="row">{{1}}</th>
+                        <th scope="row">{{\App\Http\Controllers\FunctionsController::e2p(1)}}</th>
                         <td><input type="text" value="سکینه رحمانی" style="text-align:center;border:none; width:300px;"/></td>
                         <td>حقوق و حق الزحمه</td>
                         <td>{{isset($cost['activity_value'])&&isset($cost['point_value'])?\App\Http\Controllers\FunctionsController::e2p(number_format(((int)($sum))))." ریال ":null}}</td>
@@ -51,7 +51,7 @@
                             @continue
                         @endif
                         <tr>
-                            <th scope="row">{{$index+1}}</th>
+                            <th scope="row">{{\App\Http\Controllers\FunctionsController::e2p($index+1)}}</th>
                             <td>_</td>
                             <td>_</td>
                             <td>_</td>

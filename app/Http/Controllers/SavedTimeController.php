@@ -13,8 +13,8 @@ class SavedTimeController extends Controller
 {
     public static function todayDate()
     {
-        date_default_timezone_set("Asia/Tehran");
-        return (string) date('dmY');
+        // تاریخ فعال سامانه (پیش‌فرض: امروز) - از نوار بالای پنل قابل تغییر است.
+        return FunctionsController::systemDmy();
     }
 
     public static function noDuplicate($id, $mode)
@@ -58,7 +58,7 @@ class SavedTimeController extends Controller
         date_default_timezone_set("Asia/Tehran");
 
         return DB::table('tbl_calendar')
-            ->where('dmy', date('dmY'))
+            ->where('dmy', FunctionsController::systemDmy())
             ->where('status', '<>', '3')
             ->orderBy('id', 'desc')
             ->first();

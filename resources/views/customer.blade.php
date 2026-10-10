@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Auth;
 //var_dump(PointsController::managerData(auth()->guard('manager')->id()))
 ?>
 
-@extends('layouts.auth')
+@extends('layouts.attendance')
 
 @section('title')
     نرم افزار حضوروغیاب
@@ -110,8 +110,9 @@ use Illuminate\Support\Facades\Auth;
                             @foreach ( AppendCustomerController::showManagerCustomers() as $item)
                                 <div class="col-md-4">
                                     <div class="card">
-                                        @if(\App\Http\Controllers\PhotoController::show($item->customer_id)->exists())
-                                            <img src="images/users/{{\App\Http\Controllers\PhotoController::show($item->customer_id)->orderBy('tbl_users_profile.id','desc')->first()->name}}" class="card-img-top" alt="...">
+                                        @php($userPhoto = \App\Http\Controllers\PhotoController::show($item->customer_id)->orderBy('tbl_users_profile.id','desc')->first())
+                                        @if($userPhoto)
+                                            <img src="images/users/{{$userPhoto->name}}" class="card-img-top" alt="...">
                                         @else
                                             <img src="{{asset('images/users/PRP.jpg')}}" class="card-img-top" alt="...">
                                         @endif
@@ -127,8 +128,8 @@ use Illuminate\Support\Facades\Auth;
                                                     <progress id="timer-progress" value="100" max="100" style="display: none;"></progress>زمان سپری شده
                                                 </div>
                                                 <div class="btn-group mb-5" role="group" style="display: flex; vertical-align: middle; justify-content: center;" aria-label="Basic mixed styles example">
-                                                    <button type="button" id="timer-pause-{{$item->customer_id}}" class="btn btn-danger col-md-5">توقف</button>
-                                                    <button type="button" id="timer-start-{{$item->customer_id}}" class="btn btn-success col-md-5">شروع</button>
+                                                    <button type="button" id="timer-pause-{{$item->customer_id}}" data-name="{{$item->name}}" class="btn btn-danger col-md-5">توقف</button>
+                                                    <button type="button" id="timer-start-{{$item->customer_id}}" data-name="{{$item->name}}" class="btn btn-success col-md-5">شروع</button>
                                                 </div>
                                             </div>
                                         </ul>
@@ -138,7 +139,7 @@ use Illuminate\Support\Facades\Auth;
                                     <!-- <script src="{{ asset('js/timer.js') }}" rel="preload" as="script" ></script> -->
                                     <script type="text/javascript">
                                         var dt{{$item->customer_id}};
-                                        runTimer({{$item->customer_id}});
+                                        runTimer({{$item->customer_id}}, @json($item->name));
                                     </script>
                                 @endif
                             @endforeach
@@ -177,15 +178,20 @@ use Illuminate\Support\Facades\Auth;
                                                 $absents = 0;
                                                 $vacations = 0;
                                                 $special = 0;
-                                                $holidays = 0;?>
+                                                $holidays = 0;
+                                                // one read of the calendar + one presence query per
+                                                // customer, instead of 2 full calendar reads and 3
+                                                // presence queries for every single cell
+                                                $calendarDays = CalendarController::show();
+                                                $presentByCalendar = TimerController::savedTimesMap($item->customer_id);?>
                                                 @for($j = 0; $j < 6; $j++)
                                                     <div class="row">
                                                         @for($i = 1; $i <= 6; $i++)
                                                             <?php
 
-                                                            if( CalendarController::show()->count() > ($day+1))
+                                                            if( count($calendarDays) > ($day+1))
                                                             {
-                                                                $calendar = CalendarController::show()[$day++];
+                                                                $calendar = $calendarDays[$day++];
                                                                 $elapced = TimerController::pastDays($calendar->dmy);
                                                                 $classes = "";
                                                             }
@@ -193,11 +199,11 @@ use Illuminate\Support\Facades\Auth;
                                                                 break;
 
                                                             if ( $elapced ):
-                                                                $present = TimerController::savedTimes($item->customer_id, $calendar->id);
-                                                                if ( $present->exists() ){
+                                                                $present = isset($presentByCalendar[$calendar->id]) ? $presentByCalendar[$calendar->id] : null;
+                                                                if ( $present ){
                                                                     if ( $calendar->status == 1) {
-                                                                        if ( $present->first()->start == 0
-                                                                            && $present->first()->pause == 0) {
+                                                                        if ( $present->start == 0
+                                                                            && $present->pause == 0) {
                                                                             $vacations++;
                                                                             $classes .= "btn-primary ";
                                                                         }else{
@@ -264,23 +270,8 @@ use Illuminate\Support\Facades\Auth;
 @endsection
 
 @section('toasts')
-    <div class="position-fixed toasts-stack bottom-0 right-0 p-3" style="z-index: 5; right: 0; bottom: 0;">
-        @if (session('status'))
-            <div id="liveToast" class="toast php-toast fade" role="alert" aria-live="assertive" aria-atomic="true" data-animation="true" data-delay="2000">
-                <div class="toast-header">
-                    <svg class="bd-placeholder-img rounded mr-2" width="20" height="20" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" preserveAspectRatio="xMidYMid slice" focusable="false"><rect width="100%" height="100%" fill="green"></rect></svg>
-                    <strong class="mr-auto">انجام شد</strong>
-                    <small>Mgh-App</small>
-                    <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Close">
-                        <span aria-hidden="true">×</span>
-                    </button>
-                </div>
-                <div class="toast-body">
-                    {{ session('status') }}
-                </div>
-            </div>
-        @endif
-    </div>
+    {{-- همان توست مشترک پنل (موفق/ناموفق) تا پیام‌های تاریخ فعال سامانه هم دیده شود --}}
+    @include('partials.toasts')
 @endsection
 
 

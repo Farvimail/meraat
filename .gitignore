@@ -21,3 +21,14 @@ storage/framework/cache/.gitignore
 storage/framework/.gitignore
 storage/app/public/.gitignore
 storage/app/.gitignore
+
+# docker compose environment (holds APP_KEY + DB password)
+.env.docker
+
+# local tooling / scratch - never commit
+composer.phar
+.orig_manager3_hash.txt
+
+# database dumps hold live personal data (users, national codes, salaries)
+inbox.sql
+*.sql.gz

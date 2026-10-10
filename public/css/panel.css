@@ -1,0 +1,1367 @@
+/* =====================================================================
+   مدیریت — پوستهٔ داشبورد پنل‌های /manager و /admin
+
+   چیدمان: نوار ناوبری ثابت سمت راست (شروعِ خواندن در RTL) و محتوا سمت چپ.
+   این فایل بعد از app.css و custom.css بارگذاری می‌شود، پس هرجا لازم بوده
+   قانون‌های عمومی برنامه با اولویت بالاتر بازنویسی شده‌اند.
+   ===================================================================== */
+
+:root {
+    --panel-nav-w: 264px;
+
+    --panel-nav-bg-1: #132033;
+    --panel-nav-bg-2: #0d1727;
+    --panel-nav-fg: #a7b6ca;
+    --panel-nav-muted: #7d8ea6;
+
+    --panel-accent: #f0b429;
+    --panel-accent-soft: rgba(240, 180, 41, .14);
+
+    --panel-bg: #eef1f7;
+    --panel-line: #e3e8f0;
+    --panel-ink: #1f2a3d;
+    --panel-muted: #6b7a90;
+    --panel-radius: 14px;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body.panel-page {
+    margin: 0;
+    background-color: var(--panel-bg) !important;
+    color: var(--panel-ink);
+    /* متن راست‌چین: بدنهٔ LTR همین مقدار را به left رزولو می‌کرد و همه
+       فرزندانش آن را ارث می‌بردند. */
+    text-align: right;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* واترمارک عمومی برنامه در پنل خیلی کم‌رنگ‌تر می‌شود تا خوانایی حفظ شود */
+body.panel-page::before {
+    opacity: .04 !important;
+}
+
+.panel-shell {
+    display: flex;
+    width: 100%;
+    min-height: 100vh;
+}
+
+/* ---------------------------------------------------------- نوار ناوبری */
+
+.panel-nav {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    inset-inline-start: 0;
+    z-index: 1040;
+
+    display: flex;
+    flex-direction: column;
+    width: var(--panel-nav-w);
+    padding: 1.15rem .85rem 1rem;
+    overflow: hidden;
+
+    color: var(--panel-nav-fg);
+    background: linear-gradient(180deg, var(--panel-nav-bg-1) 0%, var(--panel-nav-bg-2) 100%);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, .05), 0 24px 45px -35px rgba(9, 20, 38, .95);
+}
+
+.panel-brand {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    padding: .15rem .35rem 1.05rem;
+}
+
+/* لوگوی رسمیِ برنامه جای مربعِ حرف «م» */
+.panel-brand-logo {
+    display: block;
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
+    padding: 2px;
+    border-radius: 12px;
+    background: #fff;
+    object-fit: contain;
+    box-shadow: 0 8px 18px -10px rgba(240, 180, 41, .95);
+}
+
+.panel-brand-text {
+    min-width: 0;
+}
+
+.panel-brand-text strong {
+    display: block;
+    color: #fff;
+    font-size: 1.02rem;
+    line-height: 1.6;
+}
+
+.panel-brand-text small {
+    display: block;
+    color: var(--panel-nav-muted);
+    font-size: .72rem;
+}
+
+.panel-nav-close {
+    display: none;
+    margin-inline-start: auto;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, .08);
+    color: #fff;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.panel-nav-scroll {
+    flex: 1 1 auto;
+    padding: 0 .15rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, .18) transparent;
+}
+
+.panel-nav-scroll::-webkit-scrollbar {
+    width: 6px;
+}
+
+.panel-nav-scroll::-webkit-scrollbar-thumb {
+    border-radius: 99px;
+    background: rgba(255, 255, 255, .16);
+}
+
+.panel-nav-label {
+    margin: .9rem .55rem .45rem;
+    color: var(--panel-nav-muted);
+    font-size: .68rem;
+    font-weight: 600;
+}
+
+.panel-nav-links {
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+}
+
+.panel-nav-link {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .58rem .7rem;
+    border-radius: 11px;
+    color: var(--panel-nav-fg);
+    font-size: .9rem;
+    line-height: 1.8;
+    text-decoration: none;
+    transition: background-color .18s ease, color .18s ease;
+}
+
+.panel-nav-link:hover,
+.panel-nav-link:focus {
+    background: rgba(255, 255, 255, .07);
+    color: #fff;
+    text-decoration: none;
+}
+
+.panel-nav-link:focus-visible {
+    outline: 2px solid var(--panel-accent);
+    outline-offset: 2px;
+}
+
+.panel-nav-link.is-active {
+    background: var(--panel-accent-soft);
+    color: #fff;
+    font-weight: 600;
+}
+
+/* نشانگر بخش فعال روی لبهٔ بیرونی نوار */
+.panel-nav-link.is-active::before {
+    content: "";
+    position: absolute;
+    inset-inline-start: -1rem;
+    top: 50%;
+    width: 4px;
+    height: 22px;
+    border-radius: 99px;
+    background: var(--panel-accent);
+    transform: translateY(-50%);
+}
+
+.panel-nav-icon,
+.panel-nav-icon svg {
+    display: block;
+}
+
+.panel-nav-icon {
+    display: inline-flex;
+    flex: 0 0 19px;
+    color: currentColor;
+    opacity: .85;
+}
+
+.panel-nav-icon svg {
+    width: 19px;
+    height: 19px;
+}
+
+.panel-nav-link.is-active .panel-nav-icon {
+    color: var(--panel-accent);
+    opacity: 1;
+}
+
+.panel-nav-text {
+    min-width: 0;
+}
+
+.panel-nav-badge {
+    margin-inline-start: auto;
+    padding: .05rem .45rem;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, .1);
+    color: #dbe4f1;
+    font-size: .7rem;
+}
+
+.panel-nav-user {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    margin-top: .9rem;
+    padding: .6rem .65rem;
+    border: 1px solid rgba(255, 255, 255, .07);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, .05);
+}
+
+.panel-avatar {
+    display: flex;
+    flex: 0 0 36px;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .13);
+    color: #fff;
+    font-size: .92rem;
+    font-weight: 600;
+}
+
+.panel-user-text {
+    min-width: 0;
+}
+
+.panel-user-text strong {
+    display: block;
+    overflow: hidden;
+    color: #fff;
+    font-size: .85rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.panel-user-text small {
+    display: block;
+    overflow: hidden;
+    color: var(--panel-nav-muted);
+    font-size: .7rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.panel-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1035;
+    background: rgba(9, 14, 25, .45);
+}
+
+/* ------------------------------------------------------ ستون محتوا */
+
+.panel-wrap {
+    position: relative;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 100vh;
+    padding-inline-start: var(--panel-nav-w);
+}
+
+.panel-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 1030;
+
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .85rem 1.5rem;
+    border-bottom: 1px solid var(--panel-line);
+    background: rgba(255, 255, 255, .88);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+}
+
+.panel-burger {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 1px solid var(--panel-line);
+    border-radius: 11px;
+    background: #fff;
+    color: var(--panel-ink);
+    cursor: pointer;
+}
+
+.panel-burger svg {
+    width: 20px;
+    height: 20px;
+}
+
+.panel-heading {
+    margin: 0;
+    color: var(--panel-ink);
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+.panel-heading small {
+    display: block;
+    margin-top: .1rem;
+    color: var(--panel-muted);
+    font-size: .72rem;
+    font-weight: 400;
+}
+
+.panel-topbar-end {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    margin-inline-start: auto;
+}
+
+.panel-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .35rem .7rem;
+    border: 1px solid var(--panel-line);
+    border-radius: 99px;
+    background: #fff;
+    color: var(--panel-muted);
+    font-size: .78rem;
+    white-space: nowrap;
+}
+
+.panel-chip svg {
+    width: 15px;
+    height: 15px;
+}
+
+.panel-iconbtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--panel-line);
+    border-radius: 11px;
+    background: #fff;
+    color: var(--panel-muted);
+    text-decoration: none;
+    transition: color .18s ease, border-color .18s ease;
+}
+
+.panel-iconbtn:hover {
+    color: #cf3d33;
+    border-color: #f2c9c6;
+    text-decoration: none;
+}
+
+.panel-iconbtn svg {
+    width: 18px;
+    height: 18px;
+}
+
+.panel-content {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 1.4rem 1.5rem 2.2rem;
+}
+
+/* بخش‌های خود پنل با .container می‌آیند؛ داخل پنل کل عرض موجود را می‌گیرند */
+.panel-content > .container {
+    width: 100%;
+    max-width: 100%;
+}
+
+.panel-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .6rem;
+    flex-wrap: wrap;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--panel-line);
+    background: rgba(255, 255, 255, .6);
+    color: var(--panel-muted);
+    font-size: .78rem;
+}
+
+.panel-footer a {
+    color: var(--panel-muted);
+}
+
+/* ------------------------------------------------------------- کارت‌ها */
+
+body.panel-page .panel-content .card {
+    border: 1px solid var(--panel-line);
+    border-radius: var(--panel-radius) !important;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 14px 34px -26px rgba(16, 24, 40, .55);
+    margin-bottom: 1.35rem;
+}
+
+body.panel-page .panel-content .card-body {
+    padding: 1.15rem 1.25rem;
+}
+
+body.panel-page .panel-content .card > .card-header {
+    padding: .95rem 1.25rem;
+    border-bottom: 1px solid var(--panel-line);
+    border-radius: var(--panel-radius) var(--panel-radius) 0 0 !important;
+    background: #fff;
+    color: var(--panel-ink);
+    font-size: 1.02rem;
+    font-weight: 700;
+}
+
+body.panel-page .panel-content .card .card-header small {
+    font-weight: 400;
+}
+
+body.panel-page .panel-content .card .card-header small a {
+    color: var(--panel-muted);
+}
+
+body.panel-page .panel-content .card .card-header small a:hover {
+    color: #0b62d6;
+}
+
+/* کارت‌های تودرتو (مثل کارت هر کارمند در تقویم‌ها) سبک‌ترند */
+body.panel-page .panel-content .card .card .card {
+    border-color: #eaeef5;
+    box-shadow: none;
+    margin-bottom: 0;
+}
+
+body.panel-page .panel-content .card .card > .card-header {
+    background: #f8fafd;
+    font-size: .9rem;
+    font-weight: 600;
+}
+
+body.panel-page .panel-content .card-footer {
+    border-top: 1px solid var(--panel-line);
+    background: #fbfcfe;
+    border-radius: 0 0 var(--panel-radius) var(--panel-radius) !important;
+}
+
+/* ---------------------------------------------------- جدول‌ها و فرم‌ها */
+
+body.panel-page .panel-content .table {
+    margin-bottom: 0;
+}
+
+body.panel-page .panel-content .table th,
+body.panel-page .panel-content .table td {
+    vertical-align: middle;
+}
+
+body.panel-page .panel-content .table thead th {
+    border-top: 0;
+    border-bottom: 1px solid var(--panel-line);
+    color: var(--panel-muted);
+    font-size: .8rem;
+    font-weight: 600;
+}
+
+body.panel-page .panel-content .table-striped tbody tr:nth-of-type(odd) {
+    background-color: #f9fbfe;
+}
+
+body.panel-page .panel-content .table tbody tr:hover {
+    background-color: #f4f8ff;
+}
+
+body.panel-page .form-control,
+body.panel-page .form-select {
+    border-color: #dde3ec;
+    border-radius: 10px;
+}
+
+body.panel-page .form-control:focus,
+body.panel-page .form-select:focus {
+    border-color: #b9cdf0;
+    box-shadow: 0 0 0 .18rem rgba(11, 98, 214, .12);
+}
+
+body.panel-page .input-group-text {
+    border-color: #dde3ec;
+    border-radius: 10px;
+    background: #f6f8fc;
+    color: var(--panel-muted);
+    font-size: .82rem;
+}
+
+/* Bootstrap 4 گوشه‌های گروه ورودی را با فرض چیدمان LTR می‌چیند
+   (`:not(:last-child)` گوشهٔ راست را صفر می‌کند). در پنل RTL ترتیب بصری
+   عناصر برعکس ترتیب DOM است، پس رادیوس‌ها روی لبهٔ داخلی می‌افتادند و گروه
+   «چپکی» دیده می‌شد.
+
+   آن قاعدهٔ بوت‌استرپ از زنجیرهٔ `:not(...)` استفاده می‌کند و پنج کلاس
+   اختصاصی‌بودن دارد (`.input-group:not(.has-validation) > :not(:last-child)...`)،
+   پس یک انتخابگر سه‌کلاسی رویش اثر نمی‌گذارد و همیشه آخر حرف را می‌زند. برای
+   همین هر چهار گوشهٔ عضوهای دو سر گروه صریح و با اولویت تنظیم می‌شود تا نتیجه
+   به ترتیب و اختصاصی‌بودن قاعده‌های بوت‌استرپ وابسته نباشد. */
+body.panel-page .input-group > .form-control,
+body.panel-page .input-group > .custom-select,
+body.panel-page .input-group > .custom-file,
+body.panel-page .input-group > .input-group-text,
+body.panel-page .input-group > .input-group-prepend,
+body.panel-page .input-group > .input-group-append {
+    border-radius: 0;
+    margin-left: 0;
+    margin-right: 0;
+}
+
+body.panel-page .input-group > * + * {
+    margin-right: -1px;
+}
+
+/* عضو اولِ DOM در RTL سمت راست گروه است: گوشه‌های بیرونی‌اش راست و
+   گوشه‌های داخلی‌اش تخت */
+body.panel-page .input-group > :first-child,
+body.panel-page .input-group > :first-child > .input-group-text,
+body.panel-page .input-group > :first-child > .btn {
+    border-top-right-radius: 10px !important;
+    border-bottom-right-radius: 10px !important;
+    border-top-left-radius: 0 !important;
+    border-bottom-left-radius: 0 !important;
+}
+
+/* عضو آخرِ DOM سمت چپ گروه است */
+body.panel-page .input-group > :last-child,
+body.panel-page .input-group > :last-child > .input-group-text,
+body.panel-page .input-group > :last-child > .btn {
+    border-top-left-radius: 10px !important;
+    border-bottom-left-radius: 10px !important;
+    border-top-right-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+}
+
+/* گروه تک‌عضوی هم اول است و هم آخر؛ گوشه‌هایش کامل گرد می‌ماند */
+body.panel-page .input-group > :only-child {
+    border-radius: 10px !important;
+}
+
+body.panel-page .btn {
+    border-radius: 10px;
+}
+
+body.panel-page .btn-sm {
+    border-radius: 8px;
+}
+
+body.panel-page .panel-content .nav-tabs {
+    width: auto;
+    border-bottom: 1px solid var(--panel-line);
+}
+
+body.panel-page .panel-content .nav-tabs .nav-link {
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0 !important;
+    color: var(--panel-muted);
+    font-size: .88rem;
+}
+
+body.panel-page .panel-content .nav-tabs .nav-link.active {
+    border-bottom-color: #0b62d6;
+    background: transparent;
+    color: #0b62d6;
+    font-weight: 600;
+}
+
+body.panel-page .panel-content code {
+    color: #b45309;
+}
+
+/* ------------------------------------------- کنترل تاریخ فعال سامانه */
+
+.panel-chip-btn {
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.panel-chip-btn:hover {
+    border-color: #c9d6ea;
+    color: var(--panel-ink);
+    text-decoration: none;
+}
+
+.panel-chip-btn.is-override {
+    border-color: #ecc264;
+    background: #fff8e4;
+    color: #8a5a00;
+    font-weight: 600;
+}
+
+.panel-chip-caret {
+    width: 13px;
+    height: 13px;
+    opacity: .55;
+}
+
+.panel-datepick {
+    position: relative;
+}
+
+.panel-datepick-menu {
+    min-width: 272px;
+    padding: .95rem;
+    border: 1px solid var(--panel-line);
+    border-radius: 14px;
+    box-shadow: 0 22px 45px -30px rgba(9, 20, 38, .7);
+}
+
+.panel-datepick-title {
+    margin: 0 0 .5rem;
+    color: var(--panel-ink);
+    font-size: .82rem;
+    font-weight: 600;
+}
+
+.panel-datepick-label {
+    display: block;
+    margin-bottom: .35rem;
+    color: var(--panel-muted);
+    font-size: .78rem;
+}
+
+.panel-datepick-sep {
+    position: relative;
+    margin: 1rem 0;
+    border-top: 1px dashed var(--panel-line);
+    text-align: center;
+}
+
+.panel-datepick-sep span {
+    position: relative;
+    top: -.72rem;
+    padding: 0 .5rem;
+    background: #fff;
+    color: var(--panel-muted);
+    font-size: .72rem;
+}
+
+/* انتخاب‌گر جلالیِ «یک روز دقیق» (js/jdate-picker.js) */
+
+.panel-datepick-value {
+    display: block;
+    width: 100%;
+    text-align: right;
+    cursor: pointer;
+    background: #fff;
+    font-variant-numeric: tabular-nums;
+}
+
+.panel-datepick-value:hover,
+.panel-datepick-value:focus {
+    border-color: #c9d6ea;
+    color: var(--panel-ink);
+}
+
+.jdp {
+    margin-top: .4rem;
+    padding: .5rem;
+    border: 1px solid var(--panel-line);
+    border-radius: 11px;
+    background: #fff;
+    box-shadow: 0 14px 30px -24px rgba(9, 20, 38, .8);
+}
+
+.jdp-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .35rem;
+    margin-bottom: .4rem;
+}
+
+.jdp-title {
+    color: var(--panel-ink);
+    font-size: .8rem;
+    font-weight: 600;
+}
+
+.jdp-nav {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 27px;
+    height: 25px;
+    padding: 0;
+    border: 1px solid var(--panel-line);
+    border-radius: 7px;
+    background: #fff;
+    color: var(--panel-muted);
+    cursor: pointer;
+}
+
+.jdp-nav:hover {
+    border-color: #c9d6ea;
+    color: var(--panel-ink);
+}
+
+.jdp-nav svg {
+    width: 13px;
+    height: 13px;
+}
+
+.jdp-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+}
+
+.jdp-wd {
+    padding: .1rem 0 .2rem;
+    color: var(--panel-muted);
+    font-size: .66rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+.jdp-day {
+    padding: .28rem 0;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--panel-ink);
+    font-family: inherit;
+    font-size: .75rem;
+    line-height: 1.1;
+    cursor: pointer;
+}
+
+.jdp-day:hover {
+    background: #eef4ff;
+}
+
+.jdp-day.is-empty {
+    visibility: hidden;
+    cursor: default;
+}
+
+.jdp-day.is-today {
+    box-shadow: inset 0 0 0 1px #c9d6ea;
+    font-weight: 700;
+}
+
+.jdp-day.is-sel {
+    background: #2f6bff;
+    color: #fff;
+    font-weight: 700;
+}
+
+.jdp-day.is-sel:hover {
+    background: #2f6bff;
+}
+
+.jdp-foot {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    margin-top: .45rem;
+}
+
+.jdp-today {
+    padding: .15rem .55rem;
+    border: 1px solid var(--panel-line);
+    border-radius: 99px;
+    background: #fff;
+    color: var(--panel-muted);
+    font-family: inherit;
+    font-size: .7rem;
+    cursor: pointer;
+}
+
+.jdp-today:hover {
+    border-color: #c9d6ea;
+    color: var(--panel-ink);
+}
+
+/* نوار هشدار وقتی سامانه روی تاریخی غیر از امروز کار می‌کند */
+.panel-datebar {
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    flex-wrap: wrap;
+    padding: .7rem 1.5rem;
+    border-bottom: 1px solid #f0dca4;
+    background: #fff5da;
+    color: #7a5200;
+    font-size: .85rem;
+}
+
+.panel-datebar-icon {
+    flex: 0 0 20px;
+    width: 20px;
+    height: 20px;
+    color: #c98600;
+}
+
+.panel-datebar-text strong {
+    font-weight: 700;
+}
+
+.panel-datebar-text small {
+    display: block;
+    color: #9b7a34;
+    font-size: .75rem;
+}
+
+.panel-datebar-form {
+    margin-inline-start: auto;
+}
+
+/* =====================================================================
+   صفحهٔ حضور و غیاب (صفحهٔ اصلی)
+   پوستهٔ همان داشبورد است، فقط به‌جای نوار کناری یک هدر دارد.
+   ===================================================================== */
+
+.att-topbar-inner {
+    display: flex;
+    align-items: center;
+    gap: .85rem;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    width: 100%;
+    max-width: 1560px;
+    margin: 0 auto;
+}
+
+.att-brand {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+}
+
+.att-brand-text strong {
+    display: block;
+    color: var(--panel-ink);
+    font-size: 1.02rem;
+}
+
+.att-brand-text small {
+    display: block;
+    color: var(--panel-muted);
+    font-size: .72rem;
+}
+
+.att-nav {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+    margin-inline-start: .5rem;
+}
+
+.att-nav-link {
+    padding: .4rem .85rem;
+    border-radius: 999px;
+    color: var(--panel-muted);
+    font-size: .86rem;
+    text-decoration: none;
+}
+
+.att-nav-link:hover {
+    background: #f1f5fb;
+    color: var(--panel-ink);
+    text-decoration: none;
+}
+
+.att-nav-link.is-active {
+    background: #eaf1fd;
+    color: #0b62d6;
+    font-weight: 600;
+}
+
+.att-topbar-end {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    margin-inline-start: auto;
+}
+
+.att-content {
+    width: 100%;
+    max-width: 1560px;
+    margin: 0 auto;
+}
+
+/* کارت هر همکار در بخش تردد (بدون دست زدن به نمایه‌ها، فقط چیدمان) */
+.att-content .card-img-top {
+    display: block;
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    background: #eef1f7;
+}
+
+.att-content .card-title {
+    color: var(--panel-ink);
+    font-size: 1.02rem;
+    font-weight: 700;
+}
+
+.att-content .card-subtitle {
+    color: var(--panel-muted);
+    font-size: .8rem;
+}
+
+/* جعبهٔ تایمر زیر نام همکار */
+.att-content .inverse-timer {
+    width: auto;
+    margin: .2rem .4rem .8rem;
+    padding: .65rem 1rem;
+    border: 1px solid #e3ecf9;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #f8fbff, #eef4fd);
+}
+
+.att-content .digital-timer {
+    font-size: 1.3rem !important;
+    font-weight: 700;
+}
+
+/* دکمه‌های شروع/توقف در یک ردیف با فاصله (شروع سمت راست در RTL) */
+/* دکمه‌های شروع/توقف در یک ردیف با فاصله (شروع سمت راست در RTL).
+   به `body.panel-page` چسبیده تا در هر دو صفحه (حضور‌غیاب و میزکار) اعمال
+   شود؛ بوت‌استرپ برای عضو اولِ گروه گوشهٔ راست را صفر می‌کند که در RTL گوشهٔ
+   داخلیِ جفت است و ظاهر «چپکی» می‌سازد، پس هر چهار گوشه صریح و با اولویت
+   تنظیم می‌شود تا هر دو دکمه یکسان گِرد شوند. */
+body.panel-page .tab-pane .btn-group {
+    display: flex !important;
+    gap: .5rem;
+    justify-content: center;
+    direction: rtl;
+}
+
+body.panel-page .tab-pane .btn-group > .btn {
+    flex: 1 1 0;
+    margin: 0;
+    border-top-left-radius: 10px !important;
+    border-top-right-radius: 10px !important;
+    border-bottom-left-radius: 10px !important;
+    border-bottom-right-radius: 10px !important;
+}
+
+/* خلاصهٔ پای هر ماه (حضور/غیبت/...) با فاصله و چیدمان راست‌به‌چپ */
+body.panel-page .card-footer .btn-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    direction: rtl;
+}
+
+body.panel-page .card-footer .btn-group > .btn {
+    margin: 0;
+    border-radius: 8px !important;
+}
+
+/* خانه‌های روزهای ماه در «فعالیت ماهانه»
+   کلاس‌های رنگی از خود صفحه می‌آیند (btn-success و...)؛ اینجا فقط شکل‌شان و
+   رنگ روزهای بدون داده تنظیم می‌شود. */
+.att-content .row > .col {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    margin-bottom: 0;
+    border: 0;
+    /* شکاف سفید بین خانه‌ها بدون تغییر عرض (`.col` عرض ثابت ۱۶٪ دارد) */
+    box-shadow: inset 0 0 0 3px #fff;
+    border-radius: 10px;
+    font-size: .82rem;
+}
+
+/* رنگ خانه‌هایی که هیچ وضعیتی ندارند (بدون کلاس `btn-*`).
+   این رنگ عمداً روی قاعدهٔ پایه گذاشته نشد: آن قاعده با ویژگی بیشتر
+   (`0,3,0` در برابر `0,1,0`) رنگِ کلاس‌های وضعیتِ خودِ صفحه
+   (`btn-success` حضور، `btn-danger` غیبت، `btn-warning` خاص، …) را خنثی
+   می‌کرد و همهٔ روزها خاکستریِ یکسان دیده می‌شدند. */
+.att-content .row > .col:not([class*="btn-"]) {
+    background: #e9eef6;
+    color: #64748b;
+}
+
+/* تعطیل فقط وقتی خاکستریِ تیره بگیرد که وضعیتِ دیگری (خاص/حضور/…) نداشته
+   باشد. قبلاً این قاعده روی رنگ کلاس وضعیت می‌نشست و روزِ «خاص روی تعطیل»
+   در صفحهٔ اصلی برخلاف میزکار زرد دیده نمی‌شد. */
+.att-content .row > .col.cln-holiday:not([class*="btn-"]) {
+    background: #64748b;
+    color: #fff;
+}
+
+.att-content .row > .col.cln-disabled {
+    background: #dfe5ee;
+    color: #8d99ad;
+}
+
+/* خانه‌های روزهای ماه در «فعالیت ماهانه» */
+.att-days .col {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    margin-bottom: 0;
+    border: 0;
+    border-radius: 10px;
+    /* شکاف سفید بدون تغییر عرض خانه‌ها (`.col` در این برنامه عرض ثابت دارد) */
+    box-shadow: inset 0 0 0 3px #fff;
+    color: #fff;
+    font-size: .82rem;
+}
+
+.att-days .col.cln-holiday {
+    color: #fff;
+}
+
+.att-days .col.cln-disabled {
+    background: #eef1f7;
+    color: #93a1b6;
+}
+
+/* خانه‌های روز باید مربع باشند: عرض `.col` برابر ۱۶٪ ردیف است و ارتفاع قبلاً
+   یا ثابتِ ۵۰ پیکسل بود (`app.css`: `.col { height: 50px }` که بر `aspect-ratio`
+   غلبه می‌کند) یا ۳۴ پیکسل، پس خانه مستطیل دیده می‌شد. اینجا `height: auto`
+   می‌شود و ارتفاع = عرض، یعنی مربع واقعی در هر عرض صفحه. */
+body.panel-page .row > .col {
+    height: auto;
+    aspect-ratio: 1;
+    min-height: 0;
+}
+
+/* پیش‌فرض مرورگر برای هر ul یک `padding-inline-start: 40px` است که در RTL
+   سمت راست می‌نشیند؛ بوت‌استرپ فقط `padding-left` را صفر می‌کند و نتیجه
+   فاصلهٔ نامساوی چپ/راست در کارت تایمر بود (۲۲ پیکسل در برابر ۶۲). */
+body.panel-page .list-group {
+    padding-right: 0;
+}
+
+.att-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+}
+
+/* هدف پرش لنگرها کمی پایین‌تر از نوار چسبان بالا بیفتد */
+body.panel-page .panel-content [id] {
+    scroll-margin-top: 96px;
+}
+
+/* ----------------------------------------------------------- پیام‌ها */
+
+/* توست‌ها در همهٔ صفحه‌های پنل به لبهٔ راست می‌چسبند.
+   `right: 0` یعنی همان لبهٔ محتوا و فاصلهٔ دیداری را خودِ `p-3` روی پشته
+   می‌سازد. عمداً دیگر به عرض منو (`--panel-nav-w`) عقب رانده نمی‌شوند و
+   `z-index` بالاتر از منو (۱۰۴۰) اجازه می‌دهد روی منو بنشینند؛ قبلاً در
+   صفحهٔ بدونِ منو همین قاعده ۲۸۰ پیکسل فاصلهٔ بی‌دلیل می‌ساخت و در
+   صفحهٔ منودار توست را کنار منو نگه می‌داشت. */
+body.panel-page .toasts-stack {
+    right: 0 !important;
+    z-index: 1080 !important;
+}
+
+/* --------------------------------------------------------- موبایل */
+
+@media (max-width: 991.98px) {
+    .panel-nav {
+        inset-inline-start: auto;
+        right: 0;
+        transform: translateX(100%);
+        transition: transform .28s ease;
+        box-shadow: -18px 0 40px -28px rgba(9, 20, 38, .9);
+    }
+
+    body.panel-nav-open .panel-nav {
+        transform: translateX(0);
+    }
+
+    body.panel-nav-open .panel-backdrop {
+        display: block;
+    }
+
+    .panel-nav-close,
+    .panel-burger {
+        display: inline-flex;
+    }
+
+    .panel-wrap {
+        padding-inline-start: 0;
+    }
+
+    .panel-topbar,
+    .panel-content,
+    .panel-footer {
+        padding-right: 1rem;
+        padding-left: 1rem;
+    }
+}
+
+@media (max-width: 575.98px) {
+    /* تاریخ فعال سامانه روی موبایل هم می‌ماند (پرش بین ماه‌ها بدون آن ممکن
+       نیست)؛ در عوض برندِ فرعی و سربرگ‌های سریع که فقط تزئینی‌اند جمع می‌شوند. */
+    .att-brand-text small,
+    .att-nav {
+        display: none;
+    }
+
+    .panel-chip {
+        padding: .3rem .55rem;
+        font-size: .74rem;
+    }
+
+    .panel-chip svg {
+        width: 13px;
+        height: 13px;
+    }
+
+    .panel-datepick-menu {
+        min-width: 0;
+        width: calc(100vw - 2.5rem);
+    }
+}
+
+/* ------------------------------------------------------ صفحهٔ ورود */
+
+.auth-page {
+    min-height: 100vh;
+}
+
+.auth-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    min-height: 100vh;
+    padding: 2rem 1rem;
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 420px;
+    padding: 1.6rem;
+    border: 1px solid var(--panel-line);
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 30px 60px -30px rgba(9, 20, 38, .45);
+}
+
+.auth-head {
+    display: flex;
+    align-items: center;
+    gap: .8rem;
+    margin-bottom: 1.2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--panel-line);
+}
+
+.auth-logo {
+    width: 54px;
+    height: 54px;
+    border-radius: 14px;
+    background: #fff;
+    object-fit: contain;
+    box-shadow: 0 6px 16px -10px rgba(9, 20, 38, .6);
+}
+
+.auth-brand strong {
+    display: block;
+    color: var(--panel-ink);
+    font-size: 1.1rem;
+}
+
+.auth-brand small {
+    display: block;
+    color: var(--panel-muted);
+    font-size: .78rem;
+}
+
+.auth-title {
+    margin: 0 0 .25rem;
+    color: var(--panel-ink);
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+.auth-hint {
+    margin: 0 0 1.1rem;
+    color: var(--panel-muted);
+    font-size: .82rem;
+}
+
+.auth-field {
+    display: block;
+    margin-bottom: .9rem;
+}
+
+.auth-field > span {
+    display: block;
+    margin-bottom: .35rem;
+    color: var(--panel-ink);
+    font-size: .82rem;
+    font-weight: 600;
+}
+
+.auth-field .form-control {
+    height: 44px;
+    border: 1px solid var(--panel-line);
+    border-radius: 10px;
+}
+
+.auth-field .form-control:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, .15);
+}
+
+.auth-remember {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    margin: 0 0 1.1rem;
+    color: var(--panel-muted);
+    font-size: .82rem;
+    cursor: pointer;
+}
+
+.auth-submit {
+    width: 100%;
+    height: 46px;
+    border-radius: 10px;
+    font-weight: 700;
+}
+
+.auth-foot {
+    margin: 0;
+    color: var(--panel-muted);
+    font-size: .75rem;
+}
+
+/* --------------------------------------------- تقویم فعالیت سالانه */
+
+.panel-cal-head {
+    display: flex;
+    align-items: center;
+    gap: .9rem;
+}
+
+.panel-cal-avatar {
+    flex: 0 0 auto;
+    width: 84px;
+    height: 84px;
+    border: 1px solid var(--panel-line);
+    border-radius: 18px;
+    background: #eef1f7;
+    object-fit: cover;
+}
+
+.panel-cal-who {
+    min-width: 0;
+}
+
+.panel-cal-who strong {
+    display: block;
+    color: var(--panel-ink);
+    font-size: 1.05rem;
+}
+
+.panel-cal-who small {
+    display: block;
+    color: var(--panel-muted);
+    font-size: .8rem;
+}
+
+/* ماه‌ها کنار هم می‌نشینند؛ قبلاً یک ستونِ تمام‌عرضِ بی‌پایان بود */
+.panel-cal-months {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
+.panel-cal-month {
+    margin: 0;
+}
+
+.panel-cal-month > .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+}
+
+.panel-cal-month-name {
+    font-weight: 700;
+}
+
+.panel-cal-month-links {
+    color: var(--panel-muted);
+    font-size: .75rem;
+    white-space: nowrap;
+}
+
+.panel-cal-month-links a {
+    color: #0d6efd;
+    text-decoration: none;
+}
+
+.panel-cal-month-links a:hover {
+    text-decoration: underline;
+}
+
+/* blockquote پیش‌فرض حاشیهٔ ۴۰ پیکسلی دارد و شبکهٔ روزها را جمع می‌کرد */
+.panel-cal-month .blockquote {
+    margin: 0;
+    padding: 0;
+}
+
+.panel-cal-yearfoot p {
+    margin: 0 0 .6rem;
+    color: var(--panel-ink);
+}
+
+.panel-cal-yearfoot p:last-child {
+    margin-bottom: 0;
+}
+
+@media (max-width: 575.98px) {
+    .panel-cal-months {
+        grid-template-columns: 1fr;
+    }
+}

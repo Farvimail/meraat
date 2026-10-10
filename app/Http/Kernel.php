@@ -59,5 +59,9 @@ class Kernel extends HttpKernel
         'guest' => \App\Http\Middleware\RedirectIfAuthenticated::class,
         'signed' => \Illuminate\Routing\Middleware\ValidateSignature::class,
         'throttle' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
+
+        // کارهای حساسی که وقتی «تاریخ فعال سامانه» غیر از امروز واقعی است
+        // نباید اجرا شوند (مثل بکاپ‌گیری دستی).
+        'real.month' => \App\Http\Middleware\BlockOnPastMonth::class,
     ];
 }

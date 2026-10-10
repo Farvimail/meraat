@@ -832,8 +832,25 @@ class SalaryController extends Controller
     {
         date_default_timezone_set("Asia/Tehran");
 
+        // یک روز میلادی می‌تواند در چند بستهٔ تقویم تکرار شده باشد (روزهای
+        // ابتدایی/انتهایی هر ماه برای پر کردن شبکه). قبلاً بدون در نظر گرفتن
+        // بسته، بالاترین id انتخاب می‌شد و مثلاً روز ۳۰/۰۷ در بستهٔ آبان هم
+        // پیدا می‌شد و تاریخ واریز اشتباه ۳۰/۰۸ نمایش داده می‌شد. حالا فقط
+        // همان بستهٔ درخواستی بررسی می‌شود.
+        $row = DB::table('tbl_calendar')
+            ->where('dmy', FunctionsController::systemDmy())
+            ->where('package', $package)
+            ->orderBy('id', 'desc')
+            ->first();
+
+        if ($row) {
+            return $row;
+        }
+
+        // اگر روز فعال سامانه در بستهٔ این ماه نبود (ماهی در گذشته یا آینده)،
+        // آخرین روز همان ماه به‌عنوان تاریخ واریز همان ماه استفاده می‌شود.
         return DB::table('tbl_calendar')
-            ->where('dmy', date('dmY'))
+            ->where('package', $package)
             ->orderBy('id', 'desc')
             ->first();
     }
@@ -862,9 +879,12 @@ class SalaryController extends Controller
 
     public static function monthHistory()
     {
+        // نزولی تا در چیدمان راست‌به‌چپ، جدیدترین ماه سمت راست و قدیمی‌ترها
+        // با اسکرول به سمت پایین/چپ بیایند.
         return DB::table('tbl_calendar')
             ->where('package', '<=', FunctionsController::soonPackage())
             ->groupBy('package')
+            ->orderBy('package', 'desc')
             ->get();
     }
 
@@ -874,6 +894,7 @@ class SalaryController extends Controller
             ->where('package', '<=', FunctionsController::soonPackage())
             ->where('fa_month' , '=', 'اسفند')
             ->groupBy('package')
+            ->orderBy('package', 'desc')
             ->get();
     }
 

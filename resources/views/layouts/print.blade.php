@@ -34,6 +34,9 @@
 <body>
 <div id="app">
 
+    {{-- اگر «تاریخ فعال سامانه» غیر از امروز واقعی باشد، برگهٔ چاپی مهر می‌خورد --}}
+    @include('partials.date-stamp')
+
     <main class="py-4">
         @yield('fishtable')
         @yield('points_history')

@@ -10,8 +10,9 @@ class TimerController extends Controller
 {
     public static function findToday()
     {
-        date_default_timezone_set("Asia/Tehran");
-        return (string) date('dmY');
+        // «تاریخ فعال سامانه» (پیش‌فرض: امروز) تا مدیر بتواند مثل گذشته
+        // داخل ماه‌های قبل کار کند، بدون دست زدن به ساعت سرور.
+        return FunctionsController::systemDmy();
     }
     /**
      * Show the form for creating a new resource.
@@ -31,6 +32,12 @@ class TimerController extends Controller
 
     public static function check($id)
     {
+        static $cache = array();
+
+        if (array_key_exists($id, $cache)) {
+            return $cache[$id];
+        }
+
         $time = DB::table('tbl_saved_time')
             ->join('tbl_timer','tbl_saved_time.id','=','tbl_timer.saved_time_id')
             ->join('tbl_calendar','tbl_timer.calendar_id','=','tbl_calendar.id')
@@ -43,7 +50,7 @@ class TimerController extends Controller
             ->get();
         //mdy
 
-        return $time;
+        return $cache[$id] = $time;
     }
 
     public static function timerDate($id, $dmy)
@@ -127,6 +134,15 @@ class TimerController extends Controller
 
     public static function pastDays($dmy)
     {
+        // The result does not depend on $dmy (the comparison below is
+        // commented out in the original code), so it is the same for every
+        // cell of every customer - compute it once per request.
+        static $cached = null;
+
+        if ($cached !== null) {
+            return $cached;
+        }
+
         $pakage = CalendarController::findPackage();
 // dd($pakage,self::todayOffset($pakage)+1);
         $calendar = DB::table('tbl_calendar')
@@ -142,7 +158,7 @@ class TimerController extends Controller
                 $found = true;
         endforeach;
 
-        return $found;
+        return $cached = $found;
     }
 
     public function calendarData()
@@ -154,6 +170,36 @@ class TimerController extends Controller
                 'tbl_calendar.dmy'=> self::findToday(),
                 'customer_id'=> $id
             ]);
+    }
+
+    /**
+     * All presence rows of one customer keyed by calendar id, so a page that
+     * draws a whole month can use one query instead of one query per day.
+     * The first row per calendar id wins, which matches the original
+     * ->first() call in the views.
+     */
+    public static function savedTimesMap($id)
+    {
+        static $cache = array();
+
+        if (isset($cache[$id])) {
+            return $cache[$id];
+        }
+
+        $rows = DB::table('tbl_saved_time')
+            ->join('tbl_timer','tbl_saved_time.id','=','tbl_timer.saved_time_id')
+            ->where('customer_id', $id)
+            ->select('calendar_id','start','pause')
+            ->get();
+
+        $map = array();
+        foreach ($rows as $row) {
+            if (!array_key_exists($row->calendar_id, $map)) {
+                $map[$row->calendar_id] = $row;
+            }
+        }
+
+        return $cache[$id] = $map;
     }
 
     public static function savedTimes($id, $cid)

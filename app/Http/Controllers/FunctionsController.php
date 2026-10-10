@@ -15,12 +15,89 @@ class FunctionsController extends Controller
         return str_replace($en, $fn, $number);
     }
 
+    /**
+     * ارقام فارسی/عربی را به انگلیسی برمی‌گرداند.
+     *
+     * ورودی‌های قیمت با جداکنندهٔ هزارگان (ویرگول) نمایش داده می‌شوند و ممکن
+     * است با ارقام فارسی وارد شوند؛ پیش از ذخیره باید به عدد خالص تبدیل شوند.
+     *
+     * @param  string $value
+     * @return string
+     */
+    public static function p2e($value)
+    {
+        $fa = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹', '٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+        $en = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+
+        return str_replace($fa, $en, $value);
+    }
+
+    /**
+     * Gregorian date to Jalali (Solar Hijri) date. Standard algorithm, no
+     * extra dependency - the panel dates are Persian, the file names stay
+     * Gregorian so they remain sortable and downloadable.
+     *
+     * @param  int $gy
+     * @param  int $gm
+     * @param  int $gd
+     * @return array [year, month, day]
+     */
+    public static function gregorianToJalali($gy, $gm, $gd)
+    {
+        $g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+        $gy2 = ($gm > 2) ? ($gy + 1) : $gy;
+
+        $days = 355666 + (365 * $gy) + ((int) (($gy2 + 3) / 4)) - ((int) (($gy2 + 99) / 100))
+            + ((int) (($gy2 + 399) / 400)) + $gd + $g_d_m[$gm - 1];
+
+        $jy = -1595 + (33 * ((int) ($days / 12053)));
+        $days %= 12053;
+
+        $jy += 4 * ((int) ($days / 1461));
+        $days %= 1461;
+
+        if ($days > 365) {
+            $jy += (int) (($days - 1) / 365);
+            $days = ($days - 1) % 365;
+        }
+
+        if ($days < 186) {
+            $jm = 1 + (int) ($days / 31);
+            $jd = 1 + ($days % 31);
+        } else {
+            $jm = 7 + (int) (($days - 186) / 30);
+            $jd = 1 + (($days - 186) % 30);
+        }
+
+        return [$jy, $jm, $jd];
+    }
+
+    /**
+     * Jalali timestamp with Tehran time, e.g. "1405/07/17 14:09".
+     * Pass it through e2p() to get Persian digits.
+     *
+     * @param  int $timestamp
+     * @return string
+     */
+    public static function jdate($timestamp)
+    {
+        date_default_timezone_set("Asia/Tehran");
+
+        list($jy, $jm, $jd) = self::gregorianToJalali(
+            (int) date('Y', $timestamp),
+            (int) date('n', $timestamp),
+            (int) date('j', $timestamp)
+        );
+
+        return sprintf('%04d/%02d/%02d %s', $jy, $jm, $jd, date('H:i', $timestamp));
+    }
+
     public static function soonPackage()
     {
         date_default_timezone_set("Asia/Tehran");
 
         return DB::table('tbl_calendar')
-            ->where('dmy', date('dmY'))
+            ->where('dmy', self::systemDmy())
             ->orderBy('id', 'desc')
             ->first()
             ->package;
@@ -31,11 +108,123 @@ class FunctionsController extends Controller
         date_default_timezone_set("Asia/Tehran");
 
         return DB::table('tbl_calendar')
-            ->where('dmy', date('dmY'))
+            ->where('dmy', self::systemDmy())
             ->where('status','<>',3)
             ->orderBy('id', 'desc')
             ->first()
             ->package;
+    }
+
+    /**
+     * کلید نشستِ «تاریخ فعال سامانه».
+     *
+     * مدیر می‌تواند از نوار بالای پنل یک روز دیگر (مثلاً داخل ماه قبل) را فعال
+     * کند تا سامانه همان روز را «امروز» ببیند. قبلاً برای این کار تاریخ خودِ
+     * سیستم عوض می‌شد که روی سرور ممکن نیست.
+     */
+    const SYSTEM_DATE_KEY = 'system_date';
+
+    /**
+     * تاریخ فعال سامانه به شکل Y-m-d؛ اگر مدیری تاریخی فعال کرده باشد همان
+     * روز، وگرنه امروز واقعی (به وقت تهران).
+     *
+     * @return string
+     */
+    public static function systemDate()
+    {
+        date_default_timezone_set("Asia/Tehran");
+
+        $override = self::systemDateOverride();
+
+        return $override !== null ? $override : date('Y-m-d');
+    }
+
+    /**
+     * امروزِ واقعی به شکل Y-m-d، مستقل از تاریخ فعال سامانه.
+     *
+     * برای سقف فهرست ماه‌ها لازم است: فهرست باید همیشه تا ماه جاری برسد،
+     * حتی وقتی مدیر روی ماهی در گذشته کار می‌کند و تاریخ فعال عقب‌تر است.
+     *
+     * @return string
+     */
+    public static function realDate()
+    {
+        date_default_timezone_set("Asia/Tehran");
+
+        return date('Y-m-d');
+    }
+
+    /**
+     * همان تاریخ، به شکل dmy که جدول تقویم استفاده می‌کند (مثل 09102026).
+     *
+     * @return string
+     */
+    public static function systemDmy()
+    {
+        date_default_timezone_set("Asia/Tehran");
+
+        return date('dmY', strtotime(self::systemDate()));
+    }
+
+    /**
+     * مهرزمان تاریخ فعال سامانه.
+     *
+     * @return int
+     */
+    public static function systemTimestamp()
+    {
+        date_default_timezone_set("Asia/Tehran");
+
+        return strtotime(self::systemDate());
+    }
+
+    /**
+     * تاریخ فعال‌شده توسط مدیر (اگر معتبر باشد) وگرنه null.
+     *
+     * @return string|null
+     */
+    public static function systemDateOverride()
+    {
+        $value = session(self::SYSTEM_DATE_KEY);
+
+        if (is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+            return $value;
+        }
+
+        return null;
+    }
+
+    /**
+     * آیا سامانه روی تاریخی غیر از امروز واقعی کار می‌کند؟
+     *
+     * (اگر مدیری عمداً همین امروز را فعال کرده باشد، سامانه در عمل روی امروز
+     * واقعی است و کارهای حساس نباید قفل شوند.)
+     *
+     * @return bool
+     */
+    public static function isOffRealToday()
+    {
+        return self::hasSystemDate() && self::systemDate() !== self::realDate();
+    }
+
+    /**
+     * آیا سامانه روی تاریخی غیر از امروز واقعی کار می‌کند؟
+     *
+     * @return bool
+     */
+    public static function hasSystemDate()
+    {
+        return self::systemDateOverride() !== null;
+    }
+
+    /**
+     * تاریخ فعال سامانه به شمسی برای نمایش، مثل «۱۴۰۵/۰۶/۱۵».
+     *
+     * @return string
+     */
+    public static function systemDateJalali()
+    {
+        return self::e2p(substr(self::jdate(self::systemTimestamp()), 0, 10));
     }
 
     public static function GenerateThumbnail($im_filename,$th_filename,$max_width,$max_height,$quality = 1)

@@ -17,14 +17,44 @@ use Illuminate\Support\Facades\Auth;
 //var_dump(PointsController::managerData(auth()->guard('manager')->id()))
 ?>
 
-@extends('layouts.auth')
+@extends('layouts.panel')
+
+@php
+    // «عیدی و پاداش» فقط در ماه اسفند رندر می‌شود، پس آیتم منو هم همان شرط را
+    // دارد تا به بخشی اشاره نکند که اصلاً وجود ندارد.
+    $hasRewards = AppendRewardsController::rewardTime();
+
+    $panelNav = array();
+    if ($hasRewards) {
+        $panelNav[] = array('label' => 'عیدی و پاداش', 'href' => '#rewards', 'icon' => 'gift');
+    }
+    $panelNav[] = array('label' => 'امتیازها', 'href' => '#points', 'icon' => 'star');
+    $panelNav[] = array('label' => 'نقش‌ها', 'href' => '#roles', 'icon' => 'shield');
+    $panelNav[] = array('label' => 'کارمندها', 'href' => '#customers', 'icon' => 'users');
+    // بخش «آرشیو کارمندها» داخل همان بخش کارمندها رندر می‌شود؛ همیشه در منو
+    // هست چون بخش همیشه (حتی با پیام «آرشیو خالی») رندر می‌شود.
+    $panelNav[] = array('label' => 'آرشیو کارمندها', 'href' => '#customers_archive', 'icon' => 'archive');
+    // ترتیب منو همان ترتیب واقعی بخش‌ها در صفحه است (پوسته اول آرشیو و
+    // پشتیبان‌گیری را رندر می‌کند و بعد تقویم‌ها).
+    $panelNav[] = array('label' => 'آرشیو ماهیانه', 'href' => '#history', 'icon' => 'archive');
+    $panelNav[] = array('label' => 'پشتیبان‌گیری', 'href' => '#backup', 'icon' => 'database');
+    $panelNav[] = array('label' => 'تقویم‌ها', 'href' => '#calendars', 'icon' => 'calendar');
+@endphp
 
 @section('title')
     مدیریت
 @endsection
 
+@section('page_title')
+    داشبورد مدیریت
+@endsection
+
+@section('page_subtitle')
+    امتیاز، نقش، تقویم و حقوق کارکنان در یک نگاه
+@endsection
+
 @section('rewards')
-    @if( AppendRewardsController::rewardTime())
+    @if($hasRewards)
         <div class="container">
         <div class="row justify-content-center">
             <div class="col-md-12">
@@ -41,7 +71,7 @@ use Illuminate\Support\Facades\Auth;
                                 <form action="{{ route('create.rewards') }}" method="get">
                                     @csrf
                                     <input type="hidden" name="package" value="{{\App\Http\Controllers\FunctionsController::package()}}"/>
-                                    <div class="card text-white bg-goldenrod">
+                                    <div class="card bg-goldenrod">
                                         <div class="card-body">
                                             <div class="input-group mb-3">
                                                 <select name="customer_id" class="form-select form-control" id="inputGroupSelect0}">
@@ -57,7 +87,7 @@ use Illuminate\Support\Facades\Auth;
                                                     <span class="input-group-text form-control text-truncate d-inline-block" id="basic-addon1">ارزش پاداش</span>
                                                 </div>
                                             </h6>
-                                            <input type="submit" style="background:transparent; border:none" class=" text-white" value="ایجاد" />
+                                            <input type="submit" style="background:transparent; border:none" class="text-dark" value="ایجاد" />
                                         </div>
                                     </div>
                                 </form>
@@ -119,6 +149,13 @@ use Illuminate\Support\Facades\Auth;
 
                     <div class="card-body">
                         <div class="row">
+                            {{-- فهرست نام همهٔ امتیازهای ثبت‌شده؛ با list به هر ورودی نام
+                                 وصل می‌شود تا هم بتوان از فهرست انتخاب کرد و هم نام تازه نوشت. --}}
+                            <datalist id="point-name-options">
+                                @foreach (\App\Http\Controllers\AppendPointsController::allPointNames() as $pointName)
+                                    <option value="{{ $pointName }}"></option>
+                                @endforeach
+                            </datalist>
                             <!--- create mode ----->
                             <div class="col-md-4">
                                 <form action="{{ route('create.points') }}" method="get">
@@ -128,13 +165,13 @@ use Illuminate\Support\Facades\Auth;
                                         <div class="card-body">
                                             <h5 class="card-title">
                                                 <div class="input-group mb-3">
-                                                    <input type="text" class="form-control" name="name" placeholder="اینجا بنویسید" aria-label="point" aria-describedby="basic-addon1">
+                                                    <input type="text" class="form-control" name="name" list="point-name-options" autocomplete="off" placeholder="اینجا بنویسید" aria-label="point" aria-describedby="basic-addon1">
                                                     <span class="input-group-text form-control text-truncate d-inline-block" id="basic-addon1">نام امتیاز</span>
                                                 </div>
                                             </h5>
                                             <h6 class="card-subtitle mb-2 text-muted">
                                                 <div class="input-group mb-3">
-                                                    <input type="number" class="form-control" name="value" placeholder="اینجا بنویسید" aria-label="point" aria-describedby="basic-addon1">
+                                                    <input type="text" inputmode="numeric" class="form-control price-input" name="value" placeholder="اینجا بنویسید" aria-label="point" aria-describedby="basic-addon1">
                                                     <span class="input-group-text form-control text-truncate d-inline-block" id="basic-addon1">ارزش امتیاز</span>
                                                 </div>
                                             </h6>
@@ -153,13 +190,13 @@ use Illuminate\Support\Facades\Auth;
                                             <div class="card-body">
                                                 <h5 class="card-title">
                                                     <div class="input-group mb-3">
-                                                        <input type="text" class="form-control" name="name" placeholder="اینجا بنویسید" aria-label="point" value="{{$item->name}}" aria-describedby="basic-addon1">
+                                                        <input type="text" class="form-control" name="name" list="point-name-options" autocomplete="off" placeholder="اینجا بنویسید" aria-label="point" value="{{$item->name}}" aria-describedby="basic-addon1">
                                                         <span class="input-group-text form-control text-truncate d-inline-block" id="basic-addon1">نام امتیاز</span>
                                                     </div>
                                                 </h5>
                                                 <h6 class="card-subtitle mb-2 text-muted">
                                                     <div class="input-group mb-3">
-                                                        <input type="number" class="form-control" name="value" placeholder="اینجا بنویسید" aria-label="point" value="{{$item->value}}" aria-describedby="basic-addon1">
+                                                        <input type="text" inputmode="numeric" class="form-control price-input" name="value" placeholder="اینجا بنویسید" aria-label="point" value="{{ number_format((int)$item->value) }}" aria-describedby="basic-addon1">
                                                         <span class="input-group-text form-control text-truncate d-inline-block" id="basic-addon1">ارزش امتیاز</span>
                                                     </div>
                                                 </h6>
@@ -178,6 +215,42 @@ use Illuminate\Support\Facades\Auth;
             </div>
         </div>
     </div>
+
+    <script>
+        (function () {
+            'use strict';
+
+            var FA = '۰۱۲۳۴۵۶۷۸۹';
+
+            // قیمت امتیاز فقط رقم نگه می‌دارد و هر سه رقم از راست ویرگول می‌گذارد.
+            function formatPrice(input) {
+                var digits = input.value.replace(/[۰-۹]/g, function (ch) {
+                    return String(FA.indexOf(ch));
+                }).replace(/[^\d]/g, '');
+
+                input.value = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            }
+
+            var prices = document.querySelectorAll('.price-input');
+            for (var i = 0; i < prices.length; i++) {
+                formatPrice(prices[i]);
+                prices[i].addEventListener('input', function () {
+                    formatPrice(this);
+                });
+            }
+
+            // پیش از ارسال، جداکننده‌ها حذف شوند تا عدد خالص ذخیره شود.
+            var forms = document.querySelectorAll('form');
+            for (var j = 0; j < forms.length; j++) {
+                forms[j].addEventListener('submit', function () {
+                    var inputs = this.querySelectorAll('.price-input');
+                    for (var k = 0; k < inputs.length; k++) {
+                        inputs[k].value = inputs[k].value.replace(/,/g, '');
+                    }
+                });
+            }
+        })();
+    </script>
 @endsection
 
 @section('roles')
@@ -303,6 +376,8 @@ use Illuminate\Support\Facades\Auth;
                 <div class="card">
                     <div class="card-header">کارمندها
                         <small><a style="color:black" href="salary/table/month/{{\App\Http\Controllers\CalendarController::findPackage()}}" id="customers">حقوق کارکنان</a></small>
+                        <small> / </small>
+                        <small><a style="color:black" href="#customers_archive">آرشیو کارمندها ({{ FunctionsController::e2p(AppendCustomerController::showManagerCustomers(true)->count()) }})</a></small>
                     </div>
                     <div class="card-body">
                         <div class="row">
@@ -425,7 +500,10 @@ use Illuminate\Support\Facades\Auth;
                                                 </div>
                                                 <input type="submit" style="background:transparent; border:none" class="" value="بروزرسانی" />
                                                 <a href="customers/delete/id/{{$item->customer_id}}" class="">حذف</a>
+                                                <a href="customers/report/id/{{$item->customer_id}}" class="">گزارش</a>
                                                 <a href="salary/activity/c/{{$item->customer_id}}/month/{{\App\Http\Controllers\CalendarController::findPackage()}}" class="">فعالیت</a>
+                                                <a href="customers/archive/id/{{$item->customer_id}}" class=""
+                                                   onclick="return confirm('کارمند به آرشیو منتقل شود؟ از فهرست فعال‌ها و کارت‌های تایمر خارج می‌شود ولی همهٔ داده‌هایش می‌ماند و با «بازگردانی» برمی‌گردد.')">آرشیو</a>
                                             </form>
                                         </div>
                                         <ul class="list-group list-group-flush">
@@ -531,8 +609,8 @@ use Illuminate\Support\Facades\Auth;
                                                         <progress id="timer-progress" value="100" max="100" style="display: none;"></progress>زمان سپری شده
                                                     </div>
                                                     <div class="btn-group" role="group" style="display: flex; vertical-align: middle; justify-content: center;" aria-label="Basic mixed styles example">
-                                                        <button type="button" id="timer-pause-{{$item->customer_id}}" class="btn btn-danger col-md-5">توقف</button>
-                                                        <button type="button" id="timer-start-{{$item->customer_id}}" class="btn btn-success col-md-5">شروع</button>
+                                                        <button type="button" id="timer-pause-{{$item->customer_id}}" data-name="{{$item->name}}" class="btn btn-danger col-md-5">توقف</button>
+                                                        <button type="button" id="timer-start-{{$item->customer_id}}" data-name="{{$item->name}}" class="btn btn-success col-md-5">شروع</button>
                                                     </div>
                                                 </div>
                                             </div>
@@ -543,13 +621,87 @@ use Illuminate\Support\Facades\Auth;
 
                                     <script type="text/javascript">
                                         var dt{{$item->customer_id}};
-                                        runTimer({{$item->customer_id}});
+                                        runTimer({{$item->customer_id}}, @json($item->name));
                                     </script>
                                 @endif
                             @endforeach
                         </div>
                     </div>
 
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ---------------- آرشیو کارمندها ----------------
+         کارمندانی که به آرشیو منتقل شده‌اند: کارت‌های غیرفعال با همان
+         اطلاعات پایه + تاریخ آرشیو. از اینجا می‌توان گزارش کامل دید یا
+         کارمند را دوباره فعال کرد. داده‌ها و سوابق دست‌نخورده می‌مانند. --}}
+    <div class="container" style="margin-top: 15px;">
+        <div class="row justify-content-center">
+            <div class="col-md-12">
+                <div class="card border-secondary">
+                    <div class="card-header" id="customers_archive">آرشیو کارمندها
+                        <small>
+                            <span style="color:#6c757d">
+                                کارمندان غیرفعال؛ داده‌ها و سوابق حضور و حقوقشان حفظ شده است
+                            </span>
+                        </small>
+                    </div>
+                    <div class="card-body">
+                        @if(AppendCustomerController::showManagerCustomers(true)->count() == 0)
+                            <p class="mb-0" style="color:#6c757d">هنوز کارمندی در آرشیو نیست. از دکمهٔ «آرشیو» روی کارت هر کارمند می‌توانید او را به اینجا منتقل کنید.</p>
+                        @else
+                            <div class="row">
+                                @foreach ( AppendCustomerController::showManagerCustomers(true) as $item)
+                                    <?php $archivedUser = AppendCustomerController::showCustomer($item->customer_id); ?>
+                                    <div class="col-md-4">
+                                        <div class="card border-secondary">
+                                            <div class="card-header" style="background: transparent; opacity: .75">
+                                                @if(\App\Http\Controllers\PhotoController::show($item->customer_id)->exists())
+                                                    <img src="images/users/{{\App\Http\Controllers\PhotoController::show($item->customer_id)->orderBy('tbl_users_profile.id','desc')->first()->name}}" class="card-img-top" alt="...">
+                                                @else
+                                                    <img src="{{asset('images/users/PRP.jpg')}}" class="card-img-top" alt="...">
+                                                @endif
+                                            </div>
+                                            <div class="card-body">
+                                                <h5 class="card-title">{{$archivedUser->name}}</h5>
+                                                <p class="card-text mb-1">
+                                                    <small>کد ملی: {{FunctionsController::e2p($archivedUser->national_code)}}</small>
+                                                </p>
+                                                <p class="card-text mb-1">
+                                                    <small>
+                                                        نقش:
+                                                        @if(!empty(AppendRolesController::selectedManagerRole(\App\Http\Controllers\FunctionsController::package(), $item->customer_id)))
+                                                            {{AppendRolesController::selectedManagerRole(\App\Http\Controllers\FunctionsController::package(), $item->customer_id)->name}}
+                                                        @else
+                                                            —
+                                                        @endif
+                                                    </small>
+                                                </p>
+                                                @if($archivedUser->archived_at)
+                                                    <p class="card-text mb-1">
+                                                        <small>
+                                                            آرشیو شده در:
+                                                            {{FunctionsController::e2p(\App\Http\Controllers\FunctionsController::jdate(strtotime($archivedUser->archived_at)))}}
+                                                        </small>
+                                                    </p>
+                                                @endif
+                                                <p class="card-text mb-0">
+                                                    <a href="customers/report/id/{{$item->customer_id}}">گزارش کامل</a>
+                                                    <span> / </span>
+                                                    <a href="customers/restore/id/{{$item->customer_id}}">بازگردانی</a>
+                                                    <span> / </span>
+                                                    <a href="customers/delete/id/{{$item->customer_id}}"
+                                                       onclick="return confirm('کارمند برای همیشه حذف شود؟ سابقهٔ حضور، امتیازات و روابط او نیز پاک می‌شود. این عمل برگشت‌پذیر نیست.')">حذف کامل</a>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
                 </div>
             </div>
         </div>
@@ -585,26 +737,30 @@ use Illuminate\Support\Facades\Auth;
                                                 $absents = 0;
                                                 $vacations = 0;
                                                 $special = 0;
-                                                $holidays = 0;?>
+                                                $holidays = 0;
+                                                // read the calendar once per customer and fetch all of
+                                                // the customer's presence rows in a single query
+                                                $calendarDays = CalendarController::show();
+                                                $presentByCalendar = TimerController::savedTimesMap($item->customer_id);?>
                                                 @for($j = 0; $j < 6; $j++)
                                                     <div class="row">
                                                         @for($i = 1; $i <= 6; $i++)
                                                             <?php
 
-                                                            if( CalendarController::show()->count() > ($day+1))
+                                                            if( count($calendarDays) > ($day+1))
                                                             {
-                                                                $calendar = CalendarController::show()[$day++];
+                                                                $calendar = $calendarDays[$day++];
                                                                 $elapced = TimerController::pastDays($calendar->dmy);
                                                                 $classes = "";
                                                             } else
                                                                 break;
 
                                                             if ( $elapced ):
-                                                                $present = TimerController::savedTimes($item->customer_id, $calendar->id);
-                                                                if ( $present->exists() ){
+                                                                $present = isset($presentByCalendar[$calendar->id]) ? $presentByCalendar[$calendar->id] : null;
+                                                                if ( $present ){
                                                                     if ( $calendar->status == 1) {
-                                                                        if ( $present->first()->start == 1
-                                                                            && $present->first()->pause == 1) {
+                                                                        if ( $present->start == 1
+                                                                            && $present->pause == 1) {
                                                                             $vacations++;
                                                                             $classes .= "btn-primary ";
                                                                         }else{
@@ -793,16 +949,16 @@ use Illuminate\Support\Facades\Auth;
                                             @foreach(\App\Http\Controllers\SalaryController::rewardHistory() as $index=>$history)
                                                 <div class="col-md-3">
                                                     <div class="card text-center">
-                                                        <div class="card-header text-center bg-goldenrod">
-                                                            <h5 class="card-title text-light">{{$history->fa_month}} {{\App\Http\Controllers\FunctionsController::e2p(substr($history->fa_date,-4))}}</h5>
+                                                        <div class="card-header text-center">
+                                                            <h5 class="card-title">{{$history->fa_month}} {{\App\Http\Controllers\FunctionsController::e2p(substr($history->fa_date,-4))}}</h5>
                                                             <?php $monthName = \App\Http\Controllers\SalaryController::monthNames($history->package);?>
-                                                            <h6 class="card-subtitle mb-2 text-light">{{(isset($monthName[1]->m_month)?$monthName[1]->m_month:null)." - ".(isset($monthName[0]->m_month)?$monthName[0]->m_month:null)}}</h6>
+                                                            <h6 class="card-subtitle mb-2 text-muted">{{(isset($monthName[1]->m_month)?$monthName[1]->m_month:null)." - ".(isset($monthName[0]->m_month)?$monthName[0]->m_month:null)}}</h6>
                                                         </div>
                                                         <div class="card-body">
                                                             <p class="card-text"> لیست پاداش و عیدی کارمندان  </p>
                                                         </div>
-                                                        <div class="card-footer text-center bg-goldenrod">
-                                                            <a href="reward/table/month/{{$history->package}}" class="text-light">جدول پاداش</a>
+                                                        <div class="card-footer text-center">
+                                                            <a href="reward/table/month/{{$history->package}}" class="">جدول پاداش</a>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -821,24 +977,12 @@ use Illuminate\Support\Facades\Auth;
     </div>
 @endsection
 
+@section('backup')
+    @include('partials.backup')
+@endsection
+
 @section('toasts')
-    <div class="position-fixed toasts-stack bottom-0 right-0 p-3" style="z-index: 5; right: 0; bottom: 0;">
-        @if (session('status'))
-            <div id="liveToast" class="toast php-toast fade" role="alert" aria-live="assertive" aria-atomic="true" data-animation="true" data-delay="2000">
-                <div class="toast-header">
-                    <svg class="bd-placeholder-img rounded mr-2" width="20" height="20" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" preserveAspectRatio="xMidYMid slice" focusable="false"><rect width="100%" height="100%" fill="green"></rect></svg>
-                    <strong class="mr-auto">انجام شد</strong>
-                    <small>Mgh-App</small>
-                    <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Close">
-                        <span aria-hidden="true">×</span>
-                    </button>
-                </div>
-                <div class="toast-body">
-                    {{ session('status') }}
-                </div>
-            </div>
-        @endif
-    </div>
+    @include('partials.toasts')
 @endsection
 
 

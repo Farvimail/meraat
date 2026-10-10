@@ -62,11 +62,13 @@ $(document).ready(function(){
     $(document).on('click', 'button[id^="timer-"]', function(){
 
         let target = $(this).attr('id');
+        // نام همکار روی خودِ دکمه است تا تیتر توست مشخص کند پیام برای کیست.
+        let btnName = $(this).attr('data-name') || '';
         let id = target;
         id = id.substring(id.lastIndexOf('-')+1);
 
         $.ajax({
-            url: "https://meraat.piqagram.ir/present/"+target.split('-')[1],
+            url: "/present/"+target.split('-')[1],
             method: 'get',
             data: {
                 _token: $('meta[name="csrf-token"]').attr('content'),
@@ -85,9 +87,10 @@ $(document).ready(function(){
                     timerStatus(data));
                 timerStatus(data)?clearInterval(eval("dt"+id)):null;
                 let title = ((target.split('-')[1]=="pause")?"توقف":"شروع");
+                let titleWithName = btnName ? title+' — '+btnName : title;
                 /* create Toast */
-                newToast(title+' ذخیره شد ',
-                    title+' امروز شما با موفقیت ثبت شد. ',
+                newToast(titleWithName+' ذخیره شد ',
+                    title+' امروز ' + (btnName || 'کاربر') + ' با موفقیت ثبت شد. ',
                     'ajax-success',
                     'Mgh-App',
                     '#08b100',
@@ -109,8 +112,9 @@ $(document).ready(function(){
             .fail(function( jqXHR, textStatus ) {
                 console.error( "Request failed: " + textStatus );
                 let title = ((target.split('-')[1]=="pause")?"توقف":"شروع");
+                let titleWithName = btnName ? title+' — '+btnName : title;
                 /* create Toast */
-                newToast(title+" ذخیره نشد!! ",
+                newToast(titleWithName+" ذخیره نشد!! ",
                     'اشکال در انجام عمل به وجود آمده است ',
                     'ajax-fail',
                     'Mgh-App',

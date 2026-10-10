@@ -10,6 +10,18 @@ use Illuminate\Support\Facades\DB;
 class PointsController extends Controller
 {
     /**
+     * قیمت امتیاز در فرم با جداکنندهٔ هزارگان نوشته می‌شود؛ پیش از ذخیره
+     * ویرگول‌ها حذف و ارقام فارسی به انگلیسی تبدیل می‌شوند.
+     *
+     * @param  string|null $value
+     * @return int
+     */
+    private static function normalizeValue($value)
+    {
+        return (int) str_replace([',', '٬', ' ', '‌'], '', FunctionsController::p2e((string) $value));
+    }
+
+    /**
      * Show the form for creating a new resource.
      *
      * @return \Illuminate\Http\Response
@@ -28,7 +40,7 @@ class PointsController extends Controller
     {
         $point = Points::create([
             'name' => $request['name'],
-            'value' => $request['value']
+            'value' => self::normalizeValue($request['value'])
         ]);
 
         if ( auth()->guard('manager')->check() )
@@ -53,7 +65,7 @@ class PointsController extends Controller
             ->where('id', $request['point_id'])
             ->update([
                 'name' => $request['name'],
-                'value' => $request['value'],
+                'value' => self::normalizeValue($request['value']),
             ]);
 
         $request->session()->flash('status', 'امتیاز با موفقیت بروزرسانی شد');

@@ -183,7 +183,7 @@ function finishTime(body)
 {
     return {
         body: body,
-        icon: "https://meraat.piqagram.ir/images/arm.jpg",
+        icon: "/images/arm.jpg",
         image: "https://th.bing.com/th/id/OIP.fVzdKE2EPZzB5PiI1pvaFQHaHa?pid=ImgDet&rs=1",
         silent: false,
     }
@@ -192,10 +192,19 @@ function finishTime(body)
 
 //new Notification("خانم سمیه غلامرضایی",finishTime("تایم کاری امروز شما به"))
 
-function runTimer(id)
+/* تیتر توست‌های تایمر همیشه نام کاربر را هم دارد تا در صفحهٔ چند‌نفره مشخص
+   باشد پیام مربوط به کدام همکار است. */
+function timerTitle(base, name)
 {
+    return (name && name.length) ? base + ' — ' + name : base;
+}
+
+function runTimer(id, name)
+{
+    name = name || '';
+
     $.ajax({
-        url: "https://meraat.piqagram.ir/read/timer",
+        url: "/read/timer",
         method: 'get',
         data: {
             _token: $('meta[name="csrf-token"]').attr('content'),
@@ -216,8 +225,8 @@ function runTimer(id)
                 timerStatus(data));
             (JSON.parse(data).reverse()[0].pause==1)?clearInterval(eval("dt"+id)):null;
             /* create Toast */
-            newToast('دریافت اطلاعات',
-                'اطلاعات تایمر کاربر دریافت شد.',
+            newToast(timerTitle('دریافت اطلاعات', name),
+                'اطلاعات تایمر ' + (name || 'کاربر') + ' دریافت شد.',
                 'ajax-success',
                 'Mgh-App',
                 '#08b100',
@@ -238,8 +247,8 @@ function runTimer(id)
     .done(function( data ) {
         if ( console && console.log && data.toString() != [] ) {
             /* create Toast */
-            newToast('راه اندازی تایمر',
-                'تایمر کاربر راه اندازی شد.',
+            newToast(timerTitle('راه اندازی تایمر', name),
+                'تایمر ' + (name || 'کاربر') + ' راه اندازی شد.',
                 'ajax-done',
                 'Mgh-App',
                 '#007aff',
@@ -257,7 +266,7 @@ function runTimer(id)
         .fail(function( jqXHR, textStatus ) {
             console.error( "Request failed: " + textStatus );
             /* create Toast */
-            newToast('Timer problem!!',
+            newToast(timerTitle('اشکال در تایمر', name),
                 'اشکال در انجام عمل به وجود آمده است '+textStatus,
                 'ajax-fail',
                 'Mgh-App',
@@ -292,7 +301,7 @@ function runTimer(id)
             console.log(property);
             $.ajax({
                 type:'POST',
-                url: `https://meraat.piqagram.ir/upload/ajax`,
+                url: `/upload/ajax`,
                 data: form_data,
                 contentType: false,
                 processData: false,
@@ -343,7 +352,7 @@ function runTimer(id)
             id = id.substring(id.lastIndexOf('n')+1);
 
             $.ajax({
-                url: 'https://meraat.piqagram.ir/delete/ajax',
+                url: '/delete/ajax',
                 method: 'GET',
                 data: {
                     _token: $('meta[name="csrf-token"]').attr('content'),
