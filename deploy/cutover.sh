@@ -113,15 +113,28 @@ log "۳/۵ تست کانتینر روی 127.0.0.1:$WEB_PORT"
 
 check() {
     # check <مسیر> <کدهای مجاز> <برچسب>
-    local path="$1" regex="$2" label="$3" code
-    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 "http://127.0.0.1:$WEB_PORT$path" || true)
-    code=${code:-000}
+    local path="$1" regex="$2" label="$3" code attempt
+    # A single short attempt is not enough here: the first request after the
+    # data import rebuilds the InnoDB cache and the compiled views, and on this
+    # host that measures ~27s against ~0.05s once warm. A 25s timeout reported
+    # a healthy container as "000" because curl hung up before nginx answered.
+    for attempt in 1 2 3; do
+        code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 90 "http://127.0.0.1:$WEB_PORT$path" || true)
+        code=${code:-000}
+        [[ "$code" =~ $regex ]] && break
+        sleep 3
+    done
     printf '   %-28s HTTP %s\n' "$label" "$code"
     # Matching with =~ keeps the pattern unquoted; `case $code in $allow`
-    # does NOT expand an alternation inside the variable, it treats "^(2|3)[0-9][0-9]$"
-    # as one literal pattern and never matches.
+    # does NOT expand an alternation inside the variable, it treats "2*|3*" as
+    # one literal pattern and never matches.
     [[ "$code" =~ $regex ]]
 }
+
+# Pay the cold-cache cost before judging the container, and make sure the
+# request that surfaces to the first real visitor after the switch is warm.
+printf '   warming up (the first request after a data import is slow)\n'
+curl -s -o /dev/null --max-time 180 "http://127.0.0.1:$WEB_PORT/" || true
 
 fail=0
 check "/"       "^(2|3)[0-9][0-9]$" "صفحهی اصلی"  || fail=1
