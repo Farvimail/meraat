@@ -21,7 +21,7 @@ set -euo pipefail
 # user@host سرور. می‌توانی با متغیر محیطی هم بدهی.
 SERVER="${SERVER:-}"
 # مسیر پوشه پروژه روی سرور
-REMOTE_DIR="${REMOTE_DIR:-/srv/meraat}"
+REMOTE_DIR="${REMOTE_DIR:-/var/www/meraat}"
 # پورت ssh و کلید، در صورت نیاز
 SSH_OPTS="${SSH_OPTS:-}"
 
@@ -85,10 +85,22 @@ fi
 
 # درخت قبلی کنار گذاشته می‌شود تا فایل‌های حذف‌شده هم واقعا بروند (وگرنه داخل
 # ایمیج پخته می‌شوند). آپلودها و دیتابیس داخل volume داکر هستند، نه این پوشه.
-if [ -d "$DIR" ]; then
-    mv "$DIR" "$DIR.prev-$TS"
+# درخت قبلی کپی میشود (نه rename): پوشهی پروژه زیر /var/www است که مال
+# root و drwx--x--x است، پس کاربر عادی اجازهی ساختن یا تغییرنام ورودی
+# داخلش را ندارد. ضمناً با rename نشدن، فایل .env که به کانتینر bind شده
+# سر جایش میماند و mount داکر باطل نمیشود.
+if [ -d "$DIR" ] && [ -n "$(ls -A "$DIR" 2>/dev/null)" ]; then
+    SNAP="$HOME/$(basename "$DIR").prev-$TS"
+    cp -a "$DIR" "$SNAP"
+    printf '   کپی درخت قبلی: %s\n' "$SNAP"
 fi
+
 mkdir -p "$DIR"
+
+# پوشه از داخل خالی میشود تا فایلهایی که در مخزن حذف شدهاند هم واقعا بروند
+# (وگرنه داخل ایمیج پخته میشوند). آپلودها و دیتابیس در volume داکر هستند،
+# نه این پوشه، پس این حذف به آنها کاری ندارد.
+find "$DIR" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 
 tar xzf "$TMP" -C "$DIR"
 rm -f "$TMP"
@@ -102,8 +114,8 @@ find "$DIR/deploy" "$DIR/docker" -name '*.sh' -exec sed -i 's/\r$//' {} + 2>/dev
 chmod +x "$DIR"/deploy/*.sh "$DIR"/docker/*.sh 2>/dev/null || true
 
 # فقط سه درخت قبلی نگه داشته می‌شود تا دیسک پر نشود.
-if ls -1d "$DIR".prev-* >/dev/null 2>&1; then
-    ls -1d "$DIR".prev-* | sort | head -n -3 | xargs -r rm -rf
+if ls -1d "$HOME/$(basename "$DIR").prev-"* >/dev/null 2>&1; then
+    ls -1d "$HOME/$(basename "$DIR").prev-"* | sort | head -n -3 | xargs -r rm -rf
 fi
 
 printf '   کد در %s باز شد.\n' "$DIR"

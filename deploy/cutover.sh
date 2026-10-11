@@ -2,7 +2,7 @@
 #
 # سوییچ دامنهی سایت زنده از PHP نیتیو سرور به استک داکر.
 #
-#   cd /home/ghafari/meraat && ./deploy/cutover.sh
+#   cd /var/www/meraat && ./deploy/cutover.sh
 #
 # این اسکریپت را خودت اجرا کن (نیاز به sudo دارد و وسط کار رمز میپرسد).
 #

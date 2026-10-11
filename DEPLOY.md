@@ -37,7 +37,7 @@ volume ها: meraat_db (دیتابیس) | meraat_storage (لاگ/سشن/بکاپ
 ```bash
 docker --version                       # باید باشد
 docker compose version                 # باید 2.3.3 یا بالاتر باشد (فیلد name در compose)
-mkdir -p /srv/meraat
+mkdir -p /var/www/meraat
 ```
 
 ## ۳) ساخت فایل `.env`
@@ -76,10 +76,12 @@ DB_ROOT_PASSWORD=یک-رمز-قوی
 SERVER=root@آی-پی-سرور ./deploy/push.sh
 ```
 
-اسکریپت آرشیو می‌سازد، با ssh می‌فرستد و روی سرور در `/srv/meraat` باز می‌کند.
-`.env` سرور دست‌نخورده می‌ماند (کنار گذاشته و برگردانده می‌شود) و درخت قبلی با
-نام `/srv/meraat.prev-<تاریخ>` برای بازگشت سریع نگه داشته می‌شود (فقط سه نسخه
-آخر).
+اسکریپت آرشیو می‌سازد، با ssh می‌فرستد و روی سرور در `/var/www/meraat` باز می‌کند.
+`.env` سرور دست‌نخورده می‌ماند (کنار گذاشته و برگردانده می‌شود). خودِ پوشه جابه‌جا
+نمی‌شود و فقط از داخل خالی و پر می‌شود، چون `/var/www` مال root است و کاربر عادی
+اجازه‌ی ساختن یا تغییرنام ورودی داخلش را ندارد؛ این‌طور فایل `.env` که به کانتینر
+bind شده هم باطل نمی‌شود. برای بازگشت سریع، هر استقرار یک کپی از درخت قبلی در
+`/home/<کاربر>/meraat.prev-<تاریخ>` می‌گذارد (فقط سه نسخه آخر).
 
 فرستاده **نمی‌شود**: `.git`، `vendor` (داخل ایمیج نصب می‌شود)، `node_modules`،
 `inbox.sql`، `storage/` و `public/images/users`.
@@ -97,7 +99,7 @@ mysqldump --single-transaction --quick --skip-lock-tables \
 دیتابیس ساخته شود.)
 
 ```bash
-cd /srv/meraat
+cd /var/www/meraat
 ./deploy/import-db.sh /root/meraat-live.sql.gz          # اول خلاصه را نشان می‌دهد
 ./deploy/import-db.sh /root/meraat-live.sql.gz --yes    # بارگذاری واقعی
 ```
@@ -110,19 +112,19 @@ cd /srv/meraat
 آپلودها در دیتابیس نیستند؛ فایل‌اند:
 
 ```bash
-cd /srv/meraat
+cd /var/www/meraat
 docker compose -f docker-compose.prod.yml cp \
     /var/www/meraat/public/images/users/. app:/var/www/html/public/images/users/
 ```
 
 (مسیر مبدأ را با مسیر واقعی سایت فعلی عوض کن. اگر volume آپلود هنوز ساخته نشده
-باشد، کپی داخل `/srv/meraat/public/images/users/` پیش از اولین build هم کار
+باشد، کپی داخل `/var/www/meraat/public/images/users/` پیش از اولین build هم کار
 می‌کند، چون volume اولین بار از محتوای ایمیج پر می‌شود.)
 
 ## ۷) استقرار
 
 ```bash
-cd /srv/meraat
+cd /var/www/meraat
 ./deploy/deploy.sh
 ```
 
@@ -152,7 +154,7 @@ SERVER=root@آی-پی-سرور ./deploy/push.sh --deploy
 تکراری برای یک server_name نماند):
 
 ```bash
-cp /srv/meraat/deploy/host-nginx-meraat.conf /etc/nginx/sites-available/meraat.piqagram.ir
+cp /var/www/meraat/deploy/host-nginx-meraat.conf /etc/nginx/sites-available/meraat.piqagram.ir
 
 # مسیر ssl_certificate را اگر فرق می‌کند اصلاح کن
 nano /etc/nginx/sites-available/meraat.piqagram.ir
@@ -186,7 +188,7 @@ compose که هر دقیقه `schedule:run` می‌زند و در `app/Console/K
 `storage/app/backups/meraat-<تاریخ>_<ساعت>.sql.gz` می‌نشینند (۳۰ روز نگه‌داری).
 
 ```bash
-cd /srv/meraat
+cd /var/www/meraat
 
 # بکاپ دستی
 docker compose -f docker-compose.prod.yml exec app php artisan db:backup
