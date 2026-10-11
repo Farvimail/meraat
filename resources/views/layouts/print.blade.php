@@ -11,14 +11,12 @@
     <title>@yield("title")</title>
 
     <!-- Scripts -->
-    <script src="https://code.jquery.com/jquery-3.5.1.min.js" rel="preload" as="script" ></script>
+    <script src="{{ asset('js/jquery.min.js') }}?v={{ filemtime(public_path('js/jquery.min.js')) }}"></script>
     <script src="{{ asset('js/app.js') }}" defer></script>
     <script src="{{ asset('js/timer.js') }}" defer></script>
     <script src="{{ asset('js/etp.js') }}" rel="preload" as="script" defer></script>
 
     <!-- Fonts -->
-    <link rel="dns-prefetch" href="https://fonts.gstatic.com">
-    <link href="https://fonts.googleapis.com/css?family=Nunito" rel="stylesheet" type="text/css">
 
     <!-- Favicon -->
     <link rel="apple-touch-icon" sizes="180x180" href="{{asset('/images/favicon/apple-touch-icon.png')}}">
@@ -27,9 +25,9 @@
     <link rel="manifest" href="{{asset('/images/favicon/site.webmanifest')}}">
 
     <!-- Styles -->
-    <link href="{{ asset('css/app.css') }}" rel="stylesheet">
-    <link href="{{ asset('css/fish.css') }}" rel="stylesheet">
-    <link href="{{ asset('css/print.css') }}" rel="stylesheet">
+    <link href="{{ asset('css/app.css') }}?v={{ filemtime(public_path('css/app.css')) }}" rel="stylesheet">
+    <link href="{{ asset('css/fish.css') }}?v={{ filemtime(public_path('css/fish.css')) }}" rel="stylesheet">
+    <link href="{{ asset('css/print.css') }}?v={{ filemtime(public_path('css/print.css')) }}" rel="stylesheet">
 </head>
 <body>
 <div id="app">
