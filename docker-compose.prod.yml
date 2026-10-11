@@ -17,6 +17,9 @@
 # very little memory to spare, so meraat must be the container that gets OOM
 # killed if anything ever runs away, never one of its neighbours.
 #
+# Two images are built here: meraat-app:prod (PHP-FPM, from Dockerfile.prod)
+# and meraat-web:prod (nginx plus public/, from Dockerfile.web).
+#
 # Requires Docker Compose 2.3.3+ for the top-level `name` field.
 name: meraat-prod
 
@@ -87,7 +90,15 @@ services:
     restart: unless-stopped
 
   web:
-    image: nginx:1.24-alpine
+    # Built from Dockerfile.web so the container has the application's public/
+    # on disk. A stock nginx image has no such directory: the uploads volume
+    # mount is enough to create /var/www/html/public as an empty folder, and
+    # nginx then answers 403 for every request because `try_files $uri/` finds
+    # the directory but no index file inside it.
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    image: meraat-web:prod
     mem_limit: 128m
     environment:
       # Rendered into the vhost by the image's envsubst entrypoint.
@@ -102,8 +113,8 @@ services:
       - ./docker/nginx/prod.conf.template:/etc/nginx/templates/default.conf.template:ro
       # Same volume as the app container: avatar uploads are written by PHP
       # into app's copy of public/images/users, and nginx can only serve them
-      # if it sees the very same directory. Everything else under public/ is
-      # identical in both images, so nothing else needs mounting.
+      # if it sees the very same directory. Every other file under public/ is
+      # baked into this image by Dockerfile.web, so nothing else needs mounting.
       - meraat_uploads:/var/www/html/public/images/users:ro
     depends_on:
       - app

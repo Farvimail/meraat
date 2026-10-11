@@ -28,11 +28,16 @@ vendor
 # --- runtime state ---------------------------------------------------------
 # storage/ and public/images/users are volumes at runtime. Compiled Blade
 # views, sessions and logs are host specific, so they must not be baked in.
+#
+# public/images/users is left out on purpose: those are the live avatar
+# uploads, they belong in the meraat_uploads volume, and the copy in the repo
+# is only a sample. Dockerfile.web serves that path from the mounted volume.
 storage/logs/*
 storage/framework/cache/*
 storage/framework/sessions/*
 storage/framework/views/*
 storage/app/backups/*
+public/images/users
 
 # --- docs / deploy helpers -------------------------------------------------
 tests

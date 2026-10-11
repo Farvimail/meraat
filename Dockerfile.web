@@ -1,0 +1,19 @@
+# meraat.piqagram.ir - static asset image for the nginx front end
+#
+# The application image (Dockerfile.prod) is PHP-FPM only: it has no web server
+# and serves nothing over HTTP. nginx has to serve CSS/JS/images straight from
+# disk while forwarding every PHP request to app:9000 over FastCGI - so it needs
+# its own copy of public/.
+#
+# Why not `image: nginx:1.24-alpine` with no build: a stock nginx image has no
+# public/ directory at all. The uploads volume is mounted at
+# /var/www/html/public/images/users, and Docker creates the parent directories
+# for a mount point - so /var/www/html/public exists but is empty. nginx then
+# matches `try_files $uri/` against that empty directory, finds no index file
+# and answers 403 Forbidden for every URL.
+#
+# public/images/users is excluded in .dockerignore: real avatars live in the
+# meraat_uploads volume, which is mounted over this directory anyway.
+FROM nginx:1.24-alpine
+
+COPY public/ /var/www/html/public/
