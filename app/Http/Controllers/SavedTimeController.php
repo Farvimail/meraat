@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Calendar;
 use App\SavedTime;
+use App\TimerHub;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use DateTimeZone;
@@ -105,6 +106,11 @@ class SavedTimeController extends Controller
                 $savedTime->id
             );
 
+            // پنل‌های باز همان لحظه خبردار می‌شوند و فقط کارتِ همین کارمند را
+            // می‌خوانند؛ جای درخواستِ دوره‌ای را می‌گیرد. بی‌اثر و بی‌خطا
+            // برمی‌گردد اگر هاب خاموش باشد.
+            TimerHub::announce($request['id'], self::todayDate());
+
             $findToday = TimerController::findToday();
             $timerDate = TimerController::timerDate($request['id'], $findToday);
             return json_encode($timerDate);
@@ -142,6 +148,9 @@ class SavedTimeController extends Controller
                 self::findToday()->id,
                 $savedTime->id
             );
+
+            // مثل ورود: پنل بلافاصله خبردار می‌شود.
+            TimerHub::announce($request['id'], self::todayDate());
 
             $findToday = TimerController::findToday();
             $timerDate = TimerController::timerDate($request['id'], $findToday);

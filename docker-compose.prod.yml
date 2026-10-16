@@ -42,6 +42,12 @@ services:
       DB_USERNAME: ${DB_USERNAME:-meraat_user}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
       TZ: Asia/Tehran
+      # Live panel refresh: after every punch PHP posts to the hub below and
+      # open panels update instantly. An empty secret turns the feature off
+      # (the panel falls back to its periodic check), so the app and the hub
+      # cannot get out of sync in a way that breaks registration.
+      TIMER_HUB_URL: http://timer-hub:8090
+      TIMER_HUB_SECRET: ${HUB_SECRET:-}
     volumes:
       # Laravel reads its configuration from this file; it is never baked into
       # the image. Read-only, so a compromised container cannot rewrite secrets.
@@ -73,6 +79,8 @@ services:
       DB_USERNAME: ${DB_USERNAME:-meraat_user}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
       TZ: Asia/Tehran
+      TIMER_HUB_URL: http://timer-hub:8090
+      TIMER_HUB_SECRET: ${HUB_SECRET:-}
     volumes:
       - ./.env:/var/www/html/.env:ro
       - meraat_storage:/var/www/html/storage
@@ -82,6 +90,41 @@ services:
         condition: service_started
       db:
         condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  # Live refresh for the panel (see ws/README.md).
+  #
+  # The panel opens one WebSocket to /ws and the app posts to /publish after a
+  # punch; the hub forwards "customer N changed" to the panels watching that
+  # card. That removes the one-request-per-second poll the panel used to need,
+  # which matters on a host that also serves other sites.
+  #
+  # Bound to loopback: only the host nginx (which terminates TLS) talks to it.
+  # No volume, no database, no writable filesystem - nothing to lose on restart.
+  timer-hub:
+    build:
+      context: ./ws
+      dockerfile: Dockerfile
+    image: meraat-timer-hub:prod
+    mem_limit: 96m
+    environment:
+      HUB_PORT: "8090"
+      # Same value the app sends. Empty means publishing is refused, which is
+      # the safe default: nobody outside the stack can make panels reload.
+      HUB_SECRET: ${HUB_SECRET:-}
+    ports:
+      - "${WS_BIND:-127.0.0.1}:${WS_PORT:-8091}:8090"
+    # The hub holds open sockets only; /tmp is enough for a scratch space.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
     logging:
       driver: json-file
       options:

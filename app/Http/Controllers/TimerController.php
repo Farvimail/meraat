@@ -53,6 +53,13 @@ class TimerController extends Controller
         return $cache[$id] = $time;
     }
 
+    /**
+     * رکوردهای یک روز که تایمر پنل روی آن حساب می‌شود.
+     *
+     * همین خروجی به اپ هم می‌رسد (`MobileApiController::todayPayload`) و هر
+     * دو طرف عدد را از همین رکوردها می‌سازند؛ پس شرطِ «رکوردهای حذف‌شده»
+     * باید در هر دو یکی باشد، وگرنه کارکردِ پنل و اپ از هم جدا می‌افتد.
+     */
     public static function timerDate($id, $dmy)
     {
         $time = DB::table('tbl_saved_time')
@@ -63,6 +70,10 @@ class TimerController extends Controller
                 'tbl_calendar.dmy'=> $dmy,
                 'customer_id'=> $id
             ])
+            ->where(function ($query) {
+                $query->where('tbl_saved_time.deleted', 0)
+                    ->orWhereNull('tbl_saved_time.deleted');
+            })
             ->select('dmy',DB::raw("concat(month,'/',day,'/',year,', ',time) as 'date'"), 'start', 'pause', 'users.name')
             ->orderBy('tbl_saved_time.id','asc')
 //            ->groupBy('tbl_timer.customer_id')
@@ -85,6 +96,52 @@ class TimerController extends Controller
         $findToday = self::findToday();
         $time = self::timerDate($request['id'], $findToday);
         return json_encode($time);
+    }
+
+    /**
+     * «انگشتِ تغییر» امروزِ چند کارمند، در **یک** درخواست.
+     *
+     * چرا لازم است: پنل باید بفهمد روی گوشی ثبت تازه‌ای انجام شده یا نه.
+     * اگر هر کارت خودش هر ۱۰ ثانیه کل رکوردهایش را بخواند، صفحه‌ای با ۳۰
+     * کارمند ۳ درخواست در ثانیه می‌فرستد — روی هاست اشتراکی یعنی کندیِ همه.
+     * اینجا با یک کوئریِ جمع‌زده فقط می‌گوییم «برای هر کارمند چند رکورد و
+     * آخرینشان کدام است»؛ پنل این عدد را با قبلی مقایسه می‌کند و فقط کارتی
+     * که عوض شده رکوردهایش را می‌خواند.
+     *
+     * خروجی: `{"12":"3:918","15":"0:0"}` — یعنی کارمند ۱۲ سه رکورد دارد که
+     * آخرینشان id=918 است، و کارمند ۱۵ امروز هیچ رکوردی ندارد.
+     */
+    public function revision(Request $request)
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', (array) $request['ids']))));
+
+        if (! $ids)
+            return json_encode(array());
+
+        $rows = DB::table('tbl_saved_time')
+            ->join('tbl_timer','tbl_saved_time.id','=','tbl_timer.saved_time_id')
+            ->join('tbl_calendar','tbl_timer.calendar_id','=','tbl_calendar.id')
+            ->where('tbl_calendar.dmy', self::findToday())
+            ->whereIn('tbl_timer.customer_id', $ids)
+            ->where(function ($query) {
+                $query->where('tbl_saved_time.deleted', 0)
+                    ->orWhereNull('tbl_saved_time.deleted');
+            })
+            ->groupBy('tbl_timer.customer_id')
+            ->select('tbl_timer.customer_id', DB::raw('count(*) as rows_count'), DB::raw('max(tbl_saved_time.id) as last_id'))
+            ->get();
+
+        $map = array();
+
+        // کارمندِ بی‌ثبت هم کلید می‌گیرد؛ وگرنه «نبودنِ کلید» با «عوض‌نشدن»
+        // قاطی می‌شود و پنل نمی‌فهمد اولین ثبتِ روز رسیده است.
+        foreach ($ids as $id)
+            $map[$id] = '0:0';
+
+        foreach ($rows as $row)
+            $map[$row->customer_id] = $row->rows_count . ':' . $row->last_id;
+
+        return json_encode($map);
     }
 
     public static function noPause($id)

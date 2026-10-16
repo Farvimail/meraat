@@ -46,6 +46,10 @@ Route::get('/present/pause', 'SavedTimeController@pause');
 
 Route::get('/read/timer','TimerController@show');
 
+// «انگشتِ تغییر» همهٔ تایمرهای بازِ صفحه در یک درخواست — تا ثبتِ گوشی
+// بدون رفرشِ دستی و بدون یک درخواست سنگین برای هر کارت در پنل دیده شود.
+Route::get('/read/timer-revision','TimerController@revision');
+
 Route::get('/past/day', 'TimerController@pastDays');
 
 Route::get('/salary/table/month/{month_id}', 'SalaryController@salaryTable');
