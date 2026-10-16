@@ -19,6 +19,9 @@ class Kernel extends HttpKernel
         \App\Http\Middleware\TrimStrings::class,
         \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
         \App\Http\Middleware\TrustProxies::class,
+        // سراسری و صرفاً برای مسیرهای `/api/`: پاسخ به درخواست `OPTIONS` باید
+        // پیش از مسیریابی انجام شود، وگرنه لاراول آن را ۴۰۵ می‌کند.
+        \App\Http\Middleware\MobileApiCors::class,
     ];
 
     /**
@@ -38,7 +41,10 @@ class Kernel extends HttpKernel
         ],
 
         'api' => [
-            'throttle:60,1',
+            // سقف بالا است چون کل محل کار یک آی‌پی خروجی دارد و اپ هر
+            // کارمند چند درخواست در دقیقه می‌فرستد؛ سقفِ ۶۰ در دقیقه یعنی
+            // نفر سومِ همان صندوق با ۴۲۹ روبه‌رو می‌شود.
+            'throttle:600,1',
             'bindings',
         ],
     ];
@@ -63,5 +69,8 @@ class Kernel extends HttpKernel
         // کارهای حساسی که وقتی «تاریخ فعال سامانه» غیر از امروز واقعی است
         // نباید اجرا شوند (مثل بکاپ‌گیری دستی).
         'real.month' => \App\Http\Middleware\BlockOnPastMonth::class,
+
+        // احراز هویت اپ موبایل با توکن bearer؛ جزئیات در خود middleware.
+        'mobile.auth' => \App\Http\Middleware\MobileTokenAuth::class,
     ];
 }

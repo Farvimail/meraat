@@ -478,31 +478,44 @@ class FunctionsController extends Controller
 
             $test = explode('.', $imageName);
             $ext = end($test);
-            $name;
-            $name2;
+
+            /*
+             * پوشهٔ مقصد از `public_path()` می‌آید، نه از
+             * `$_SERVER['DOCUMENT_ROOT']`.
+             *
+             * چرا: داخل کانتینر، ریشهٔ داکیومنت `/var/www/html` است، پس مسیر
+             * قبلی به `/var/www/html/public/public/images/users/` می‌رسید —
+             * پوشه‌ای که وجود ندارد. نتیجه این بود که هر آپلود از پنل وب
+             * بی‌صدا شکست می‌خورد و عکسِ کارمند هیچ‌وقت عوض نمی‌شد.
+             */
+            $dir = public_path('images/users');
+
+            if (! is_dir($dir)) {
+                @mkdir($dir, 0775, true);
+            }
 
             /*** check exist then create new file name*/
             do {
                 $name = sha1(time()) . '.' . $ext;
-            } while (file_exists($_SERVER['DOCUMENT_ROOT'] . '/public/images/users/' . $name));
+            } while (file_exists($dir . '/' . $name));
 
             do {
                 $name2 = sha1(time()).sha1(time()) . '.' . $ext;
-            } while (file_exists($_SERVER['DOCUMENT_ROOT'] . '/public/images/users/' . $name2));
+            } while (file_exists($dir . '/' . $name2));
             /*** end check and create new file name*/
 
             /*** destination file ***/
-            $location = $_SERVER['DOCUMENT_ROOT'] . '/public/images/users/' . $name;
+            $location = $dir . '/' . $name;
 
             move_uploaded_file($request->file('file')->getPathName(), $location);
 
             if (strtolower(end($test)) == 'jpg' ||
                 strtolower(end($test)) == 'jpeg') {
 
-                self::GenerateThumbnail($_SERVER['DOCUMENT_ROOT'] . '/public/images/users/' . $name, $_SERVER['DOCUMENT_ROOT'] . '/public/images/users/' . $name2, 900, 900, $quality = 1);
+                self::GenerateThumbnail($location, $dir . '/' . $name2, 900, 900, $quality = 1);
             } else {
 
-                self::GenerateThumbnailNormal($_SERVER['DOCUMENT_ROOT'] . '/public/images/users/' . $name, $_SERVER['DOCUMENT_ROOT'] . '/public/images/users/' . $name2, 900, 900, $quality = 1);
+                self::GenerateThumbnailNormal($location, $dir . '/' . $name2, 900, 900, $quality = 1);
             }
 
             PhotoController::store($name2, $location, $request->cid);
