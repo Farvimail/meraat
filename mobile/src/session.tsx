@@ -11,7 +11,7 @@ import { API_BASE_URL, API_ORIGIN, REQUEST_TIMEOUT_MS, STORAGE_KEYS } from './li
 import { reachableFromError } from './lib/connection';
 import type { ConnectionState } from './lib/connection';
 import { getDeviceIdentity } from './lib/device';
-import { NO_PRESENCE, presenceOf } from './lib/presence';
+import { NO_PRESENCE, PUNCH_LOCK_NOTE, presenceLocksPunch, presenceOf } from './lib/presence';
 import type { PresenceState } from './lib/presence';
 import { notifyPunchRecorded, punchFailureHaptic, punchPressHaptic } from './lib/feedback';
 import { BIOMETRIC_MESSAGES, messageForError } from './lib/messages';
@@ -84,6 +84,14 @@ interface SessionValue {
    * `error` پیام را دارد.
    */
   confirmPresence(code: string): Promise<boolean>;
+  /**
+   * «کارتِ من را روی صفحهٔ پنل بزرگ نشان بده» — وقتی اسکنر باز می‌شود.
+   *
+   * هیچ خروجی و هیچ خطایی ندارد: کارِ فیزیکیِ کارمند همین است که گوشی را
+   * مقابل کدِ خودش بگیرد؛ اگر این خبر نرسد (هاب خاموش، اینترنت قطع)، اسکنِ
+   * معمولی سر جایش است و نباید پشتِ یک پیامِ خطای بی‌ربط بماند.
+   */
+  spotlightPresence(close?: boolean): void;
   /** یک تستِ سبکِ اتصال؛ `true` یعنی سرور جواب داد (حتی با ۴۰۱). */
   checkConnection(): Promise<boolean>;
   clearError(): void;
@@ -494,6 +502,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [client, noteFailure],
   );
 
+  /**
+   * خبر دادن به پنل که «کارتِ من را بزرگ کن».
+   *
+   * چرا بی‌صدا و بی‌خروجی: این یک کارِ دومی است — مسیرِ اصلی همان اسکنِ QR
+   * است. اگر هابِ پنل خاموش باشد (`sent: false`) یا درخواست به شبکه نرسد،
+   * کاربر نباید چیزی ببیند و منتظر بماند. پس عمداً `void` و بدونِ خطا.
+   */
+  const spotlightPresence = useCallback((close?: boolean) => {
+    void client.spotlightPresence(close).catch(() => {});
+  }, [client]);
+
   const today = useMemo<TodayState>(
     () => deriveToday(rows, { dmy, now: currentClock() || null }),
     // currentClock عمداً در وابستگی‌ها نیست؛ با هر تغییر rows/dmy مقدار تازه می‌گیرد.
@@ -502,6 +521,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   const punch = useCallback(async () => {
+    // قفلِ تأییدِ حضور **پیش از** هر کاری: نه اثر انگشت می‌خواهیم و نه
+    // درخواستی به سرور می‌فرستیم که قطعاً رد می‌شود (`presence_required`).
+    // خودِ قاعده در سرور اجرا می‌شود؛ این فقط همان را زودتر می‌گوید.
+    if (presenceLocksPunch(presence)) {
+      setError(PUNCH_LOCK_NOTE);
+      return;
+    }
+
     setError(null);
     setBusy(true);
 
@@ -550,12 +577,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      // «تأییدِ حضور لازم است» یعنی اپ از سرور عقب است (تأیید را کسِ دیگری
+      // انجام داده، یا مدیر پاکش کرده). `today` هم وضعیتِ تأیید را تازه می‌کند
+      // (`applyToday` فیلدِ `qr` را هم می‌نشاند)، پس دکمه درست قفل می‌شود.
+      if (failure instanceof ApiError && failure.code === 'presence_required') {
+        try {
+          applyToday(await client.today());
+        } catch {
+          // تازه‌سازی هم نشد؛ پیامِ خودِ سرور برای کاربر کافی است.
+        }
+      }
+
       noteFailure(failure);
       setError(messageForError(failure));
     } finally {
       setBusy(false);
     }
-  }, [client, today.nextIntent, applyToday, noteFailure]);
+  }, [client, today.nextIntent, applyToday, noteFailure, presence]);
 
   const value = useMemo<SessionValue>(
     () => ({
@@ -580,6 +618,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setPhoto,
       removePhoto,
       confirmPresence,
+      spotlightPresence,
       checkConnection,
       clearError: () => setError(null),
     }),
@@ -605,6 +644,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setPhoto,
       removePhoto,
       confirmPresence,
+      spotlightPresence,
       checkConnection,
     ],
   );

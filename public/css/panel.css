@@ -1746,9 +1746,9 @@ body.panel-page .toasts-stack {
 
 .presence-qr:hover,
 .presence-qr:focus {
-    /* ۱٫۹ و نه ۱٫۷: مربعِ پایه کوچک‌تر شده و این بزرگ‌نمایی همان اندازهٔ
-       خوانای قبلی را برمی‌گرداند (۸۲ × ۱٫۹ ≈ ۱۵۶ پیکسل). */
-    transform: scale(1.9) translateY(-6%);
+    /* ۱٫۵: کمتر از قبل (۱٫۹ ≈ ۱۵۶px خیلی بزرگ بود و از کارت بیرون می‌زد).
+       ۸۲ × ۱٫۵ ≈ ۱۲۳ پیکسل هنوز خواناست ولی روی صفحه جا می‌شود. */
+    transform: scale(1.5) translateY(-6%);
     transform-origin: bottom left;
     box-shadow: 0 10px 28px rgba(16, 35, 26, .34);
     z-index: 5;
@@ -1762,6 +1762,78 @@ body.panel-page .toasts-stack {
 
 .presence-qr[hidden] {
     display: none;
+}
+
+/* «کارتِ من را بزرگ نشان بده» — کارمند در اپ روی اسکنِ QR می‌زند، هابِ سوکت
+   خبر می‌دهد و `js/panel-qr.js` کلاسِ `is-spotlight` را روی همین ظرف می‌گذارد.
+
+   چرا روی ظرفِ عکس و نه روی خودِ مربعِ QR: قرار نیست تنها یک مربع بزرگ شود،
+   باید معلوم باشد کدِ **کدام** کارمند است — پس عکس و کارت هم حلقه و سایه
+   می‌گیرند. ضمناً مربعِ بزرگ‌شده با `transform` از مرکزِ عکس بالا می‌آید و
+   بیرون نمی‌زند (نسبت به `left: .5rem` حالتِ عادی که گوشه‌چسب است).
+
+   این حالت موقتی است: خودِ اسکریپت بعد از ۴۵ ثانیه یا به‌محضِ تأییدِ حضور
+   جمعش می‌کند؛ پس صفحه برای همیشه شلوغ نمی‌ماند. */
+.presence-photo.is-spotlight {
+    z-index: 4;
+    border-radius: 10px;
+    animation: presence-spotlight-ring 1.6s ease-out 3;
+}
+
+@keyframes presence-spotlight-ring {
+    0%   { box-shadow: 0 0 0 0 rgba(15, 107, 63, .45); }
+    70%  { box-shadow: 0 0 0 10px rgba(15, 107, 63, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(15, 107, 63, 0); }
+}
+
+.presence-photo.is-spotlight .presence-qr {
+    left: 50%;
+    bottom: 50%;
+    width: 210px;
+    height: 210px;
+    padding: 6px;
+    transform: translate(-50%, 50%);
+    transform-origin: center;
+    box-shadow: 0 12px 34px rgba(16, 35, 26, .45);
+    cursor: default;
+    z-index: 6;
+}
+
+/* در حالتِ بزرگ‌شده، هاور دیگر بزرگ‌نمایی نمی‌کند (همان‌جا بزرگ است)؛ فقط
+   سایه کمی عمیق‌تر می‌شود تا «قابلِ خواندن است» را برساند. */
+.presence-photo.is-spotlight .presence-qr:hover,
+.presence-photo.is-spotlight .presence-qr:focus {
+    transform: translate(-50%, 50%);
+    box-shadow: 0 14px 38px rgba(16, 35, 26, .5);
+}
+
+/* نوارِ «QR شما» — پیش از خبرِ سوکت پنهان است و در حالتِ بزرگ‌شده بالای عکس
+   می‌نشیند تا کارمند بفهمد کارتِ خودش بالا آمده. */
+.presence-spotlight-note {
+    display: none;
+}
+
+.presence-photo.is-spotlight .presence-spotlight-note {
+    position: absolute;
+    top: .4rem;
+    left: .4rem;
+    right: .4rem;
+    display: block;
+    padding: .32rem .5rem;
+    border-radius: 8px;
+    background: var(--panel-accent);
+    color: #fff;
+    font-size: .78rem;
+    font-weight: 600;
+    text-align: center;
+    z-index: 7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .presence-photo.is-spotlight {
+        animation: none;
+        box-shadow: 0 0 0 3px var(--panel-accent), 0 12px 30px rgba(16, 35, 26, .34);
+    }
 }
 
 /* «تأیید دستیِ حضور» — راهِ فرارِ مدیر برای روزی که دوربینِ گوشیِ کارمند کار
@@ -1810,5 +1882,12 @@ body.panel-page .toasts-stack {
     .presence-qr {
         width: 64px;
         height: 64px;
+    }
+
+    /* روی صفحهٔ کوچک ۲۱۰ پیکسل از کارت بیرون می‌زند؛ همان اندازهٔ خوانا
+       ولی جمع‌تر. */
+    .presence-photo.is-spotlight .presence-qr {
+        width: 150px;
+        height: 150px;
     }
 }

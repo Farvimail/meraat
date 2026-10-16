@@ -125,6 +125,14 @@ use App\Http\Controllers\FunctionsController;
                                                   title="QR تأییدِ حضور — با دوربینِ اپ اسکن کنید">
                                                 <canvas aria-hidden="true"></canvas>
                                             </span>
+
+                                            {{-- «کارتِ من را بزرگ نشان بده»: کارمند در اپ دکمهٔ اسکن را
+                                                 می‌زند، هابِ سوکت خبر می‌دهد و همین کارت بزرگ و روشن
+                                                 می‌شود. این نوار هم همان لحظه ظاهر می‌شود تا معلوم باشد
+                                                 کدِ کدام کارت است؛ متنش خطاب به خودِ کارمند است، نه
+                                                 مدیر. پیش از آن خبر، با CSS پنهان است. --}}
+                                            <span class="presence-spotlight-note"
+                                                  data-presence-spotlight-note>QR شما — با دوربینِ اپ اسکن کنید</span>
                                         </div>
                                         <div class="card-body">
                                             <input type="hidden" name="customer_id" value="{{$item->customer_id}}"/>

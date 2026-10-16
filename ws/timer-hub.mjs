@@ -16,11 +16,15 @@
  *
  *   GET /ws?dmy=16102026&ids=12,15,23   ← پنل وصل می‌شود (همان لحظه `ready`)
  *   POST /publish  {dmy,id,revision}    ← PHP بعد از ثبت می‌زند (`x-meraat-secret`)
+ *   POST /publish  {type:"qr-focus",id} ← PHP وقتی کارمند در اپ اسکنر را باز می‌کند
+ *   POST /publish  {type:"qr-blur",id}  ← PHP وقتی کارمند اسکنر را می‌بندد
  *   GET /health                          ← برای healthcheck داکر
  *
  * پیام‌های هاب به پنل:
  *   {"type":"ready","watching":3,"clients":2}            وصل شد (۳ کارت، ۲ پنل)
  *   {"type":"change","dmy":"…","id":12,"revision":"3:941"} کارمند ۱۲ عوض شد
+ *   {"type":"qr-focus","id":12}                          کارتِ ۱۲ را بزرگ نشان بده
+ *   {"type":"qr-blur","id":12}                           کارتِ ۱۲ را جمع کن (اسکنر بسته شد)
  *   {"type":"peers","count":2}                          تعداد پنل‌های وصل‌شده عوض شد
  *   {"type":"ping"}                                      نگه‌داشتنِ اتصال
  *
@@ -29,10 +33,17 @@
  *   {"type":"pong"}
  *
  * نکتهٔ امنیتی: از این کانال هیچ دادهٔ شخصی نمی‌رود — فقط «کدام کارمند عوض
- * شد». خودِ رکوردها را پنل با همان مسیرِ همیشگی می‌خواند. پس روی این مسیر
- * احراز هویتِ نشست لازم نیست (مثل `/read/timer-revision` که از قبل باز بود)،
- * ولی مسیرِ `/publish` کلیدِ مشترک دارد تا کسی از بیرون نتواند هاب را به
- * به‌روزرسانیِ بی‌دلیل وادار کند.
+ * شد» و «کدام کارت را بزرگ نشان بده». خودِ رکوردها و خودِ کدِ QR را پنل با
+ * همان مسیرِ همیشگی می‌خواند. پس روی این مسیر احراز هویتِ نشست لازم نیست
+ * (مثل `/read/timer-revision` که از قبل باز بود)، ولی مسیرِ `/publish` کلیدِ
+ * مشترک دارد تا کسی از بیرون نتواند هاب را به به‌روزرسانیِ بی‌دلیل وادار کند.
+ *
+ * چرا `qr-focus` به **همهٔ** پنل‌ها می‌رود ولی `change` فقط به کارت‌های تحتِ
+ * نظر: رویدادِ اول یک کارِ فیزیکی است — کارمند گوشی‌اش را مقابل صفحه گرفته و
+ * منتظر است ببیند کدِ خودش کجاست؛ صفحه‌ای که کارتش را دارد باید واکنش بدهد
+ * حتی اگر همان لحظه فهرستِ کارت‌هایش را به هاب نداده باشد (مثلاً صفحهٔ تازه
+ * باز شده). صفحه‌ای که آن کارت را ندارد بی‌صدا نادیده می‌گیرد. دادهٔ سنگینی
+ * هم جابه‌جا نمی‌شود: فقط یک شناسه.
  */
 
 import { createHash } from 'node:crypto';
@@ -358,6 +369,28 @@ function broadcast(change) {
   return delivered;
 }
 
+/**
+ * «کارتِ فلانی را بزرگ نشان بده» (`qr-focus`) یا «جمعش کن» (`qr-blur`) — بدونِ
+ * شرطِ تحتِ نظر داشتنِ آن کارت.
+ *
+ * چه زمانی می‌آید: کارمند در اپ روی «اسکن QR کارتِ من» می‌زند و کارتِ QR را
+ * باید روی صفحهٔ دفتر پیدا کند. اپ از راهِ سرور همین را می‌گوید و هاب به همهٔ
+ * پنل‌های باز خبر می‌دهد؛ هر پنلی که آن کارت را دارد کارتش را روشن و بزرگ
+ * می‌کند. مثل `change` فقط یک شناسه می‌رود، پس این مسیر هم هیچ دادهٔ خصوصی
+ * جابه‌جا نمی‌کند.
+ */
+function broadcastFocus(type, id) {
+  const message = JSON.stringify({ type, id });
+
+  let delivered = 0;
+
+  for (const client of clients) {
+    if (send(client, message)) delivered++;
+  }
+
+  return delivered;
+}
+
 function readBody(request) {
   return new Promise((resolve) => {
     let body = '';
@@ -407,10 +440,18 @@ const server = createServer(async (request, response) => {
       change = null;
     }
 
+    const hasId = change && (typeof change.id === 'number' || /^\d+$/.test(String(change.id)));
+
+    // `type` نیامده یعنی همان پیامِ قدیمیِ «عوض شد»؛ پس نسخهٔ قدیمیِ PHP با
+    // هابِ تازه هم بی‌دردسر کار می‌کند.
+    const type = !change || change.type === undefined ? 'change' : String(change.type);
+
     const valid =
       change &&
-      typeof change.dmy === 'string' &&
-      (typeof change.id === 'number' || /^\d+$/.test(String(change.id)));
+      hasId &&
+      (type === 'qr-focus' ||
+        type === 'qr-blur' ||
+        (type === 'change' && typeof change.dmy === 'string'));
 
     if (!valid) {
       response.writeHead(422, { 'Content-Type': 'application/json' });
@@ -418,11 +459,14 @@ const server = createServer(async (request, response) => {
       return;
     }
 
-    const delivered = broadcast({
-      dmy: change.dmy,
-      id: Number(change.id),
-      revision: String(change.revision === undefined ? '' : change.revision),
-    });
+    const delivered =
+      type === 'qr-focus' || type === 'qr-blur'
+        ? broadcastFocus(type, Number(change.id))
+        : broadcast({
+            dmy: change.dmy,
+            id: Number(change.id),
+            revision: String(change.revision === undefined ? '' : change.revision),
+          });
 
     response.writeHead(200, { 'Content-Type': 'application/json' });
     response.end(JSON.stringify({ ok: true, delivered }));

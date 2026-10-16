@@ -249,6 +249,206 @@ test('دکمهٔ تأییدِ دستی در صفحه‌ای بدونِ کارت�
 });
 
 /*
+ * «کارتِ من را بزرگ نشان بده» — کارمند در اپ اسکنرِ QR را باز می‌کند، سوکت
+ * خبر می‌دهد و `timer.js` آن را به رویدادِ DOM تبدیل می‌کند. سنجیدنِ این مسیر
+ * ارزشش را دارد چون بدونِ آن هیچ خطایی دیده نمی‌شود: کارت فقط بزرگ نمی‌شود و
+ * کارمند فکر می‌کند اپ کار نمی‌کند.
+ *
+ * صفحه با یک کارت (شناسهٔ ۱۲) جعل می‌شود، همان‌جوری که بلید می‌سازد.
+ */
+function loadPanelWithCard() {
+    const listeners = {};
+    const badges = [];
+    const holders = {};
+    const timers = [];
+    const fetched = [];
+
+    // پاسخِ دوم، حضورِ ۱۲ را تأییدشده می‌کند؛ با آن مسیرِ «جمع‌کردنِ خودکار
+    // بعد از تأیید» هم سنجیده می‌شود.
+    const fetchStub = (url) => {
+        fetched.push(String(url));
+        const second = fetched.length > 1;
+
+        return Promise.resolve({
+            status: 200,
+            ok: true,
+            json: () =>
+                Promise.resolve({
+                    codes: { 12: 'v1.12.1750000000.0f1e2d3c4b5a6978' },
+                    confirmed: second ? { 12: { method: 'qr', at: '2026-10-17 09:00:00' } } : {},
+                    expires_in: 30,
+                }),
+        });
+    };
+
+    const canvas = {
+        width: 0,
+        height: 0,
+        getContext: () => ({ fillStyle: '', fillRect() {} }),
+    };
+
+    const holder = {
+        classes: new Set(),
+        classList: {
+            add: (name) => holder.classes.add(name),
+            remove: (name) => holder.classes.delete(name),
+            contains: (name) => holder.classes.has(name),
+        },
+    };
+
+    const badge = {
+        hidden: false,
+        scrolled: 0,
+        attrs: { 'data-customer-id': '12' },
+        getAttribute(name) {
+            return name in this.attrs ? this.attrs[name] : null;
+        },
+        setAttribute(name, value) {
+            this.attrs[name] = String(value);
+        },
+        querySelector: (selector) => (selector === 'canvas' ? canvas : null),
+        closest: (selector) => (selector === '.presence-photo' ? holder : null),
+        scrollIntoView: () => {
+            badge.scrolled += 1;
+        },
+    };
+
+    badge.classList = { add() {}, remove() {} };
+    badges.push(badge);
+    holders['12'] = holder;
+
+    const document = {
+        readyState: 'complete',
+        hidden: false,
+        addEventListener(type, fn) {
+            (listeners[type] = listeners[type] || []).push(fn);
+        },
+        querySelectorAll(selector) {
+            return selector === '[data-presence-qr]' ? badges : [];
+        },
+        querySelector() {
+            return { getAttribute: () => 'csrf' };
+        },
+    };
+
+    // تایمرِ جعلی: چرخهٔ ۳۰ ثانیه‌ای اینجا با یک فراخوانیِ دستی جلو می‌رود.
+    const fakeTimeout = (fn) => {
+        timers.push(fn);
+        return timers.length;
+    };
+
+    const window = loadVendor();
+
+    new Function('window', 'document', 'fetch', 'FormData', 'setTimeout', panelSource)(
+        window,
+        document,
+        fetchStub,
+        class {
+            append() {}
+        },
+        fakeTimeout,
+    );
+
+    /** یک چرخهٔ تازه‌سازی را جلو می‌برد و صبر می‌کند تا تمام شود. */
+    async function tick() {
+        const next = timers.shift();
+
+        if (next) {
+            next();
+        }
+
+        for (let i = 0; i < 4; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+    }
+
+    return { window, document, listeners, badge, holder, canvas, timers, tick, fetched };
+}
+
+/** رویدادی که `timer.js` از پیامِ سوکت می‌سازد. */
+function focusEvent(id) {
+    return { detail: { id: String(id) } };
+}
+
+/** همان رویداد با نوعِ درست (برای سنجیدنِ ناشناخته‌ها). */
+function blurEvent(id) {
+    return { detail: { id: String(id) } };
+}
+
+test('خبرِ سوکت کارتِ همان کارمند را بزرگ می‌کند و کد را با پیکسلِ بیشتر می‌کشد', async () => {
+    const panel = loadPanelWithCard();
+    await panel.tick();
+
+    const size = panel.window.MeraatPresenceQr.qrCells('v1.12.1750000000.0f1e2d3c4b5a6978').length;
+    const normal = size * 4;
+    const zoomed = size * panel.window.MeraatPresenceQr.MODULE_PX_SPOTLIGHT;
+
+    assert.equal(panel.canvas.width, normal, 'اندازهٔ عادیِ کد روی canvas');
+
+    const focus = panel.listeners['meraat:qr-focus'];
+
+    assert.ok(focus && focus.length, 'شنوندهٔ رویدادِ بزرگ‌نمایی باید ثبت شده باشد');
+
+    focus[0](focusEvent(12));
+
+    assert.ok(panel.holder.classes.has('is-spotlight'), 'کارت باید حالتِ بزرگ‌شده بگیرد');
+    assert.equal(panel.badge.scrolled, 1, 'کارت باید داخلِ دید بیاید؛ کارمند نباید اسکرول کند');
+    assert.equal(panel.canvas.width, zoomed, 'کد در حالتِ بزرگ‌شده باید پیکسلِ بیشتری داشته باشد');
+});
+
+test('خبرِ کارمندی که کارتش روی این صفحه نیست، کارِ کسی را خراب نمی‌کند', async () => {
+    const panel = loadPanelWithCard();
+    await panel.tick();
+
+    panel.listeners['meraat:qr-focus'][0](focusEvent(12));
+    panel.listeners['meraat:qr-focus'][0](focusEvent(99));
+
+    assert.ok(
+        panel.holder.classes.has('is-spotlight'),
+        'کارتِ ۱۲ باید بزرگ بماند؛ صفحهٔ دیگری کارتِ ۹۹ را دارد',
+    );
+    assert.equal(panel.badge.scrolled, 1, 'دوباره اسکرول نمی‌شود');
+});
+
+test('با تأییدِ حضور، بزرگ‌نمایی خودش جمع می‌شود و کد به اندازهٔ عادی برمی‌گردد', async () => {
+    const panel = loadPanelWithCard();
+    await panel.tick();
+
+    panel.listeners['meraat:qr-focus'][0](focusEvent(12));
+    assert.ok(panel.holder.classes.has('is-spotlight'));
+
+    const zoomed = panel.canvas.width;
+
+    await panel.tick();
+
+    assert.ok(!panel.holder.classes.has('is-spotlight'), 'بعد از تأیید، کارت جمع می‌شود');
+    assert.ok(panel.canvas.width < zoomed, 'کد هم به اندازهٔ عادی برمی‌گردد');
+});
+
+test('با بسته شدنِ اسکنر (qr-blur) کارت همان لحظه جمع می‌شود؛ نه بعد از ۴۵ ثانیه', async () => {
+    const panel = loadPanelWithCard();
+    await panel.tick();
+
+    const blur = panel.listeners['meraat:qr-blur'];
+
+    assert.ok(blur && blur.length, 'شنوندهٔ qr-blur باید ثبت شده باشد');
+
+    panel.listeners['meraat:qr-focus'][0](focusEvent(12));
+    assert.ok(panel.holder.classes.has('is-spotlight'));
+
+    const zoomed = panel.canvas.width;
+
+    // بلورِ کارمندِ دیگر نباید کارتِ در حالِ بزرگیِ ما را جمع کند.
+    blur[0](blurEvent(99));
+    assert.ok(panel.holder.classes.has('is-spotlight'), 'qr-blurِ کارمندِ دیگر نباید اثری داشته باشد');
+
+    blur[0](blurEvent(12));
+
+    assert.ok(!panel.holder.classes.has('is-spotlight'), 'بستنِ اسکنر باید کارت را همان لحظه جمع کند');
+    assert.ok(panel.canvas.width < zoomed, 'کد باید به اندازهٔ عادی برگردد');
+});
+
+/*
  * جلوی یک اشتباهِ آسانِ انسانی را می‌گیرد: «تأیید دستی» کارِ مدیر است و
  * جایش بخشِ «کارمندها»ی پنل است، نه کارت‌های صفحهٔ اصلیِ حضور و غیاب — و پنل
  * فقط وقتی دکمه‌اش کار می‌کند که خودِ اسکریپت را هم بار کند.
@@ -262,6 +462,12 @@ test('دکمهٔ تأییدِ دستی در پنل است (نه در صفحهٔ 
 
   assert.match(panelLayout, /js\/panel-qr\.js/, 'پوستهٔ پنل باید اسکریپتِ تأییدِ حضور را بیاورد');
   assert.match(panelLayout, /js\/vendor\/toqr\.js/, 'کدگذارِ QR باید همان‌جا باشد');
+  // نوارِ «QR شما» و علامتِ بزرگ‌نمایی باید در مارک‌آپِ همان صفحه باشد؛ وگرنه
+  // JS کلاس را می‌گذارد ولی چیزی دیده نمی‌شود.
+  assert.match(attendance, /data-presence-spotlight-note/, 'نوارِ «QR شما» باید روی کارتِ کارمند باشد');
+  assert.match(read('../../public/js/timer.js'), /meraat:qr-focus/, 'پلِ سوکت در timer.js باید باشد');
+  assert.match(read('../../public/js/timer.js'), /meraat:qr-blur/, 'پلِ سوکت باید qr-blur را هم رد کند');
+  assert.match(read('../../ws/timer-hub.mjs'), /qr-focus/, 'هاب باید نوعِ پیامِ بزرگ‌نمایی را بشناسد');
   assert.match(manager, /data-presence-confirm-manual/, 'دکمه در بخشِ «کارمندها»ی پنل باشد');
   assert.doesNotMatch(
     attendance,

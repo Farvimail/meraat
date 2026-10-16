@@ -43,9 +43,13 @@ Route::prefix('v1')->group(function () {
         Route::post('profile/photo', 'MobileApiController@uploadPhoto');
         Route::delete('profile/photo', 'MobileApiController@deletePhoto');
 
-        // تأییدِ حضور با کدِ چرخانِ QR که پنل نشان می‌دهد. «اول ثبت، بعد
-        // تأیید»: اپ پس از ورودِ موفق، اگر لازم بود، اسکنر را باز می‌کند.
+        // تأییدِ حضور با کدِ چرخانِ QR که پنل نشان می‌دهد. «اول تأیید، بعد
+        // ثبت»: تا این تأیید نیاید، `punch` با `presence_required` رد می‌شود.
         Route::post('qr/confirm', 'MobileApiController@qrConfirm');
+
+        // «کارتِ من را روی صفحهٔ پنل بزرگ نشان بده» — وقتی کارمند اسکنر را
+        // باز می‌کند. بهترین تلاش: بدونِ هاب هم بی‌صدا بی‌اثر است.
+        Route::post('qr/spotlight', 'MobileApiController@qrSpotlight');
     });
 });
 

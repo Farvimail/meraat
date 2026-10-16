@@ -30,9 +30,8 @@ import {
   formatStopwatch,
 } from '../lib/jalali';
 import { PUNCH_LABEL, workedSeconds } from '../lib/punch';
-import { buzzAdvice, buzzTest } from '../lib/feedback';
 import { PresenceScanSheet } from '../components/presence-scan';
-import { needsQrScan, presenceNote } from '../lib/presence';
+import { PUNCH_LOCK_NOTE, needsQrScan, presenceNote, presenceLocksPunch } from '../lib/presence';
 import { useSession } from '../session';
 import { colors, radius, spacing } from '../theme';
 import HistoryScreen from './HistoryScreen';
@@ -52,6 +51,7 @@ export default function DashboardScreen() {
     presence,
     presenceBusy,
     confirmPresence,
+    spotlightPresence,
     setPhoto,
     photoProgress,
     removePhoto,
@@ -77,8 +77,6 @@ export default function DashboardScreen() {
   const errorRef = useRef<string | null>(null);
   errorRef.current = error;
   const [ready, setReady] = useState(false);
-  // نتیجهٔ «آزمایش لرزش»؛ `null` یعنی هنوز آزمایشی انجام نشده بوده است.
-  const [buzz, setBuzz] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
 
   /**
@@ -110,16 +108,6 @@ export default function DashboardScreen() {
     setRefreshing(true);
     await refresh();
     setRefreshing(false);
-  };
-
-  /**
-   * آزمایشِ لرزش: هر سه موتور را می‌زند و نتیجه را روی صفحه می‌نویسد.
-   *
-   * نتیجه به‌جای لاگ، روی صفحه می‌آید: کاربرِ ما پایِ ترمینالِ Metro نیست و
-   * تنها راهِ فهمیدنِ «لرزشِ گوشی خاموش است یا اپ نمی‌لرزد» همین جمله است.
-   */
-  const runBuzzTest = async () => {
-    setBuzz(buzzAdvice(await buzzTest()));
   };
 
   /**
@@ -211,6 +199,41 @@ export default function DashboardScreen() {
   const workedToday = workedSeconds(today.punches, { now: liveClock || null });
   const running = today.present;
 
+  /**
+   * قفلِ دکمهٔ ثبت تا تأییدِ حضورِ امروز.
+   *
+   * قاعده در سرور اجرا می‌شود (`presence_required`)؛ اینجا فقط نشان داده
+   * می‌شود. ضربهٔ دکمه در این حالت بی‌جواب نمی‌ماند: همان اسکنر باز می‌شود —
+   * تنها کاری که کاربر باید بکند همین است.
+   */
+  const punchLocked = presenceLocksPunch(presence);
+
+  /**
+   * باز کردنِ اسکنر.
+   *
+   * همان لحظه به پنل خبر می‌دهیم که «کارتِ من را بزرگ نشان بده»: کارمند
+   * پشتِ گوشی است و صفحهٔ دفتر شاید ده کارت داشته باشد؛ بدونِ این، باید
+   * کارتِ خودش را بین آن‌ها پیدا کند و کدِ ۳۰ ثانیه‌ای هم تا پیدا کند عوض
+   * می‌شود. این خبر کاملاً اختیاری است — نرسیدنش مانعِ اسکن نیست.
+   */
+  const openScan = () => {
+    setScanNote(null);
+    setScanOpen(true);
+    spotlightPresence();
+  };
+
+  /**
+   * بستنِ شیتِ اسکنر (دکمهٔ «بستن» یا اسکنِ موفق).
+   *
+   * به پنل هم خبر می‌دهیم کارت جمع شود؛ وگرنه کارتِ بزرگ‌شده تا پایانِ ۴۵
+   * ثانیه روی صفحهٔ دفتر می‌ماند. این خبر هم مثلِ باز کردن «بهترین تلاش» است
+   * و خطایی نشان نمی‌دهد.
+   */
+  const closeScan = () => {
+    setScanOpen(false);
+    spotlightPresence(true);
+  };
+
   const timerCaption = running
     ? `شیفت از ساعت ${formatClock(today.openSince)} باز است`
     : workedToday === null
@@ -259,19 +282,6 @@ export default function DashboardScreen() {
             },
           },
           {
-            // اگر کاربر گفت «ویبره کار نمی‌کند»، اول همین را می‌زند: اپ
-            // هر سه مسیرِ لرزش را امتحان می‌کند و نتیجه (وضعیتِ مجوز،
-            // موتورهای اجراشده، سطحِ اندروید) را روی همان صفحه می‌نویسد تا
-            // معلوم شود مسئله در اپ است یا در تنظیماتِ خودِ گوشی.
-            key: 'testBuzz',
-            label: 'آزمایش لرزش',
-            icon: 'vibrate',
-            onPress: () => {
-              setMenuOpen(false);
-              void runBuzzTest();
-            },
-          },
-          {
             key: 'signOut',
             label: 'خروج از حساب',
             icon: 'logout-variant',
@@ -300,7 +310,7 @@ export default function DashboardScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.body}
+        contentContainerStyle={[styles.body, presence.enabled ? styles.bodyWithPresence : null]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />
         }
@@ -311,13 +321,45 @@ export default function DashboardScreen() {
           </FadeInView>
         ) : null}
 
-        {buzz ? (
-          <FadeInView>
-            <Banner tone="info" text={buzz} />
+        {/* تأییدِ حضور — اوّلِ صفحه، بالای عکسِ پروفایل.
+
+             چرا بالا: این کارت می‌گوید «حضورِ امروز در سامانه پذیرفته شده یا
+             نه»؛ تا وقتی سبز نشود، تایمر و ساعت فقط عددی روی صفحه‌اند. کارِ
+             روزانهٔ کارمند همین است، پس باید پیش از هر چیز و پیش از کارتِ
+             کارکرد دیده شود. اگر سرور کلیدِ کدِ چرخان را نداشته باشد، کلِ این
+             کارت دیده نمی‌شود و اپ مثل قبل کار می‌کند. */}
+        {presence.enabled ? (
+          <FadeInView delay={40}>
+            <Card style={styles.presenceCard}>
+              <View style={styles.presenceHead}>
+                <Text style={styles.cardTitle}>تأیید حضور</Text>
+
+                {presence.confirmed ? (
+                  <View style={styles.presenceBadge}>
+                    <MaterialCommunityIcons name="check-circle-outline" size={14} color={colors.brand} />
+                    <Text style={styles.presenceBadgeLabel}>تأیید شده</Text>
+                  </View>
+                ) : null}
+              </View>
+
+              <Text style={styles.presenceNote}>{presenceNote(presence)}</Text>
+
+              {needsQrScan(presence) ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="اسکن QR کارت من"
+                  onPress={openScan}
+                  style={({ pressed }) => [styles.presenceButton, pressed && styles.pressedSoft]}
+                >
+                  <MaterialCommunityIcons name="qrcode-scan" size={18} color={colors.white} />
+                  <Text style={styles.presenceButtonLabel}>اسکن QR کارتِ من</Text>
+                </Pressable>
+              ) : null}
+            </Card>
           </FadeInView>
         ) : null}
 
-        <FadeInView delay={40}>
+        <FadeInView delay={120}>
           <View style={styles.profile}>
             {/* ضربه روی خودِ عکس، کارتِ پروفایل را باز می‌کند: مسیرِ طبیعیِ
                 کاربر برای «عکسِ من» همین تصویر است، نه منوی گوشه. */}
@@ -347,7 +389,7 @@ export default function DashboardScreen() {
           </View>
         </FadeInView>
 
-        <FadeInView delay={140}>
+        <FadeInView delay={200}>
           <Card style={styles.timerCard}>
             <View style={styles.timerHead}>
               <Text style={styles.cardTitle}>کارکرد امروز</Text>
@@ -367,45 +409,6 @@ export default function DashboardScreen() {
             </View>
           </Card>
         </FadeInView>
-        {/* تأییدِ حضور با QR.
-
-             چرا کارتِ جدا زیرِ پروفایل: تأیید، کارِ **بعد** از ثبت است و
-             باید جایی باشد که کاربر بعد از زدنِ دکمهٔ ثبت چشمش به آن بیفتد.
-             اگر سرور کلیدِ QR را نداشته باشد این کارت کامل دیده نمی‌شود و اپ
-             مثل قبل کار می‌کند. */}
-        {presence.enabled ? (
-          <FadeInView delay={120}>
-            <Card style={styles.presenceCard}>
-              <View style={styles.presenceHead}>
-                <Text style={styles.cardTitle}>تأیید حضور</Text>
-
-                {presence.confirmed ? (
-                  <View style={styles.presenceBadge}>
-                    <MaterialCommunityIcons name="check-circle-outline" size={14} color={colors.brand} />
-                    <Text style={styles.presenceBadgeLabel}>تأیید شده</Text>
-                  </View>
-                ) : null}
-              </View>
-
-              <Text style={styles.presenceNote}>{presenceNote(presence)}</Text>
-
-              {needsQrScan(presence) ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="اسکن QR کارت من"
-                  onPress={() => {
-                    setScanNote(null);
-                    setScanOpen(true);
-                  }}
-                  style={({ pressed }) => [styles.presenceButton, pressed && styles.pressedSoft]}
-                >
-                  <MaterialCommunityIcons name="qrcode-scan" size={18} color={colors.white} />
-                  <Text style={styles.presenceButtonLabel}>اسکن QR کارتِ من</Text>
-                </Pressable>
-              ) : null}
-            </Card>
-          </FadeInView>
-        ) : null}
       </ScrollView>
 
       <PresenceScanSheet
@@ -418,14 +421,14 @@ export default function DashboardScreen() {
 
           if (ok) {
             setScanNote(null);
-            setScanOpen(false);
+            closeScan();
             return true;
           }
 
           setScanNote(errorRef.current ?? 'تأیید نشد؛ دوباره تلاش کنید.');
           return false;
         }}
-        onClose={() => setScanOpen(false)}
+        onClose={closeScan}
       />
 
       {/* ویرایشگرِ عکس: بعد از انتخاب از گالری/دوربین باز می‌شود (بیرون از
@@ -449,14 +452,18 @@ export default function DashboardScreen() {
            فاصله می‌گیرد. */}
       <FadeInView style={[styles.punchFooter, { paddingBottom: spacing.xxl + spacing.md + insets.bottom }]}>
         <PunchButton
-          label={PUNCH_LABEL[today.nextIntent]}
+          label={punchLocked ? 'تأیید حضور با QR' : PUNCH_LABEL[today.nextIntent]}
           tone={today.nextIntent}
-          onPress={() => void punch()}
+          onPress={() => (punchLocked ? openScan() : void punch())}
           loading={busy}
         />
 
+        {/* تذکر زیرِ دکمه: وقتی ثبت قفل است، جایش را "چرا" و "چه کنم" می‌گیرد؛
+            متنِ اثر انگشت آنجا گمراه‌کننده بود (کاربر انگشت می‌زد و ثبتی نمی‌شد). */}
         <Text style={styles.hint}>
-          برای ثبت، اثر انگشتِ ثبت‌شده روی همین گوشی باید تطبیق بخورد.
+          {punchLocked
+            ? PUNCH_LOCK_NOTE
+            : 'برای ثبت، اثر انگشتِ ثبت‌شده روی همین گوشی باید تطبیق بخورد.'}
         </Text>
       </FadeInView>
     </Screen>
@@ -473,9 +480,23 @@ const styles = StyleSheet.create({
 
        کلیدِ مهم: این فاصله **فقط** روی ناحیهٔ اسکرول اثر دارد. نوارِ ثابتِ
        پایین (دکمهٔ ثبت حضور/خروج) بیرون از `ScrollView` است، پس هر چقدر این
-       عدد بالا برود، دکمه یک پیکسل هم پایین‌تر نمی‌رود. */
+       عدد بالا برود، دکمه یک پیکسل هم پایین‌تر نمی‌رود.
+
+       این عدد برای حالتی است که **عکسِ پروفایل** اوّلِ صفحه است؛ وقتی کادرِ
+       تأییدِ حضور اوّلِ صفحه می‌نشیند، `bodyWithPresence` جایش را می‌گیرد. */
     paddingTop: spacing.xxl + spacing.lg,
     gap: spacing.lg,
+  },
+  /**
+   * ناحیهٔ اسکرول وقتی کادرِ «تأیید حضور» اوّلِ صفحه است.
+   *
+   * چرا کمتر: این کادر خودش پس‌زمینهٔ سفید، خطِ دور و سایه دارد؛ پس آن نوارِ
+   * چهل‌وهشت پیکسلی بالای سرش فقط «فضای خالیِ الکی» دیده می‌شد و کادر را
+   * از سرصفحه دور می‌انداخت. یک حاشیهٔ معمولی برای جدا شدنش از سرصفحه کافی
+   * است، چون مرزش با خودش کشیده شده است.
+   */
+  bodyWithPresence: {
+    paddingTop: spacing.md,
   },
   timerCard: {
     gap: spacing.lg,

@@ -3,10 +3,12 @@ import { test } from 'node:test';
 
 import {
   NO_PRESENCE,
+  PUNCH_LOCK_NOTE,
   codeCustomerId,
   localCodeProblem,
   looksLikeCode,
   needsQrScan,
+  presenceLocksPunch,
   presenceNote,
   presenceOf,
 } from '../presence.ts';
@@ -77,4 +79,38 @@ test('جملهٔ کارت با وضعیتِ واقعی می‌خواند', () =>
   assert.match(presenceNote(base), /اسکن/);
   assert.match(presenceNote({ ...base, confirmed: true, method: 'qr' }), /QR/);
   assert.match(presenceNote({ ...base, confirmed: true, method: 'manual' }), /مدیر/);
+});
+
+/*
+ * ترتیبِ «اول تأیید، بعد ثبت».
+ *
+ * اهمیتش این است که این تابع دقیقاً همان شرطی را می‌گوید که سرور در
+ * `MobilePresence::blocksPunch` می‌سنجد؛ اگر یکی از این دو عوض شود و آن یکی
+ * نه، یا کارمند درخواستِ محکوم‌به‌شکست می‌فرستد یا دکمه بی‌دلیل قفل می‌ماند.
+ */
+test('تا تأییدِ حضور، ثبتِ ورود و خروج قفل است', () => {
+  const base = { enabled: true, required: true, confirmed: false, method: null, confirmedAt: null, secondsLeft: 20 };
+
+  assert.equal(presenceLocksPunch(base), true);
+  assert.equal(presenceLocksPunch({ ...base, confirmed: true }), false, 'تأییدِ امروز قفل را باز می‌کند');
+  assert.equal(presenceLocksPunch({ ...base, required: false }), false, 'تأییدِ نمایشی (required=false) قفلی نمی‌سازد');
+  assert.equal(presenceLocksPunch({ ...base, enabled: false }), false, 'مسیرِ خاموش قفلی ندارد');
+  assert.equal(presenceLocksPunch(undefined), false, 'پاسخِ ناقص/قدیمی نباید کارمند را پشتِ در نگه دارد');
+});
+
+test('جملهٔ قفل «چه کنم» را می‌گوید، نه فقط «نمی‌شود»', () => {
+  assert.match(PUNCH_LOCK_NOTE, /QR/);
+  assert.match(PUNCH_LOCK_NOTE, /کار نمی‌کند/);
+});
+
+test('جملهٔ کارتِ تأییدنشده به اجباری‌بودن حساس است', () => {
+  const base = { enabled: true, required: true, confirmed: false, method: null, confirmedAt: null, secondsLeft: 20 };
+
+  // اجباری: صریح می‌گوید ثبت کار نمی‌کند تا کاربر دنبالِ مشکلِ اشتباهی نرود.
+  assert.match(presenceNote(base), /کار نمی‌کند/);
+
+  // نمایشی: همان جمله بدونِ ترساندنِ بی‌مورد.
+  const optional = presenceNote({ ...base, required: false });
+  assert.match(optional, /اسکن/);
+  assert.doesNotMatch(optional, /کار نمی‌کند/);
 });

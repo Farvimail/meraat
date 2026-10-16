@@ -18,20 +18,60 @@
  *
  * یا ساده‌تر، اسکریپت `scripts/check-presence-qr.sh` همین کار را می‌کند.
  *
- * بدونِ دیتابیس اجرا می‌شود: توابعِ ذخیره‌سازی (`confirm`/`state`) اینجا تست
- * نمی‌شوند، چون آن‌ها فقط یک in/update ساده‌اند و مسیرشان با درخواستِ واقعیِ
- * اپ سنجیده می‌شود.
+ * بدونِ دیتابیسِ واقعی اجرا می‌شود: جداول ساخته یا خوانده نمی‌شوند. ولی از
+ * وقتی `blocksPunch` آمد، «ردیفِ تأیید هست یا نه» خودش یک تصمیمِ مهم شد؛ پس
+ * facade دیتابیس با یک جعلیِ کمینه عوض می‌شود تا هر دو حالت — و مهم‌تر از
+ * آن‌ها حالتِ خطا (جدولِ تأیید ساخته نشده) — سنجیده شوند.
  */
 
 // --- ایستگاهِ وابستگی‌ها ------------------------------------------------------
 // کلاسِ واقعی به `config()` و facade دیتابیس لاراول وابسته است؛ اینجا همان‌ها
 // را با کمترین چیزِ ممکن جعل می‌کنیم تا فایل بدون اجرای لاراول تست شود.
 namespace Illuminate\Support\Facades {
+    /**
+     * جعلیِ کمینهٔ facade دیتابیس.
+     *
+     * سه حالت را می‌تواند بسازد: «ردیفِ تأیید هست»، «ردیف نیست»، و «کوئری
+     * می‌افتد». حالتِ سوم عمداً هست: اگر جدولِ تأیید ساخته نشده باشد،
+     * `blocksPunch` باید `false` بدهد (کارمند پشتِ در نماند) و این تنها جایی
+     * است که می‌شود همین را سنجید.
+     */
     class DB
     {
+        /** ردیفی که کوئری باید برگرداند (یا `null`). */
+        public static $presenceRow = null;
+
+        /** اگر true باشد، هر کوئری مثلِ «جدول نیست» می‌افتد. */
+        public static $fail = false;
+
         public static function table($name)
         {
-            throw new \RuntimeException('این بررسی نباید به دیتابیس دست بزند: ' . $name);
+            if (self::$fail) {
+                throw new \RuntimeException('شبیه‌سازیِ خطای دیتابیس: ' . $name);
+            }
+
+            return new FakeQuery($name);
+        }
+    }
+
+    /** فقط همان چند متدی که `MobilePresence` صدا می‌زند. */
+    class FakeQuery
+    {
+        private $table;
+
+        public function __construct($table)
+        {
+            $this->table = $table;
+        }
+
+        public function where($column, $value = null)
+        {
+            return $this;
+        }
+
+        public function first()
+        {
+            return DB::$presenceRow;
         }
     }
 }
@@ -169,6 +209,59 @@ namespace {
     $GLOBALS['presence_config']['services.mobile.qr.key'] = 'test-key-0123456789abcdef';
     $GLOBALS['presence_config']['services.mobile.qr.required'] = false;
     check('با required=false تأیید اجباری نیست ولی کد ساخته می‌شود', MobilePresence::required() === false && MobilePresence::enabled() === true);
+
+    // ------------------------------------- قفلِ ثبت تا تأییدِ حضورِ روز
+    // قاعدهٔ تصمیم‌گرفته‌شده: **اول تأیید، بعد ثبت.** تا ردیفِ تأییدِ امروز
+    // نباشد، نه ورود ثبت می‌شود نه خروج — و این تصمیم در سرور گرفته می‌شود،
+    // نه فقط در دکمهٔ اپ.
+    $GLOBALS['presence_config']['services.mobile.qr.required'] = true;
+    DB::$presenceRow = null;
+    check(
+        'بدونِ تأییدِ امروز، ثبتِ ورود/خروج قفل است',
+        MobilePresence::blocksPunch(12, '17102026') === true
+    );
+
+    DB::$presenceRow = (object) ['method' => 'qr', 'confirmed_at' => '2026-10-17 08:05:00'];
+    check(
+        'با تأییدِ امروز، قفل باز است',
+        MobilePresence::blocksPunch(12, '17102026') === false
+    );
+
+    // تأییدِ دستیِ مدیر هم همان ردیف را می‌نویسد، پس همان قفل را باز می‌کند.
+    DB::$presenceRow = (object) ['method' => 'manual', 'confirmed_at' => '2026-10-17 08:30:00'];
+    check(
+        'تأییدِ دستیِ مدیر هم قفل را باز می‌کند',
+        MobilePresence::blocksPunch(12, '17102026') === false
+    );
+
+    DB::$presenceRow = null;
+    $GLOBALS['presence_config']['services.mobile.qr.required'] = false;
+    check(
+        'با required=false قفل بی‌اثر است',
+        MobilePresence::blocksPunch(12, '17102026') === false
+    );
+
+    $GLOBALS['presence_config']['services.mobile.qr.key'] = '';
+    check(
+        'بدونِ کلید (مسیرِ خاموش) هیچ قفلی نیست',
+        MobilePresence::blocksPunch(12, '17102026') === false
+    );
+
+    // نبودِ جدولِ تأیید (migration اجرا نشده) نباید کارمند را پشتِ در بگذارد:
+    // «قفل نکردن» خطای کوچک است، «قفلِ بی‌دلیل» خطای بزرگ.
+    $GLOBALS['presence_config']['services.mobile.qr.key'] = 'test-key-0123456789abcdef';
+    $GLOBALS['presence_config']['services.mobile.qr.required'] = true;
+    DB::$fail = true;
+    check(
+        'اگر جدولِ تأیید خوانده نشود، ثبت قفل نمی‌شود',
+        MobilePresence::blocksPunch(12, '17102026') === false
+    );
+    DB::$fail = false;
+
+    check(
+        'ردیفِ تأیید هم با همان قاعده خوانده می‌شود (بدونِ استثناء)',
+        MobilePresence::today(12, '17102026') === null && MobilePresence::blocksPunch(12, '17102026') === true
+    );
 
     echo $failures === 0
         ? "\nهمهٔ {$checks} بررسیِ کدِ QR گذشت.\n"

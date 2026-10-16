@@ -801,6 +801,35 @@ function timerHubConnect()
             return;
         }
 
+        /*
+         * «کارتِ فلانی را بزرگ نشان بده» — کارمند در اپ اسکنر را باز کرده و
+         * منتظر است کدِ خودش را روی همین صفحه ببیند.
+         *
+         * چرا اینجا فقط یک رویدادِ DOM فرستاده می‌شود و خودِ تایمر کاری نمی‌کند:
+         * سوکت در همین فایل زندگی می‌کند، ولی کارت‌های QR و کدِ چرخان در
+         * `panel-qr.js` هستند. این دو فایل نباید به هم گره بخورند (یکی می‌تواند
+         * بدونِ دیگری بار شود)، پس مرزشان یک رویدادِ مستند است، نه صدا زدنِ
+         * تابعی از فایلِ دیگر.
+         */
+        if ( message.type === 'qr-focus' || message.type === 'qr-blur' ) {
+            if ( typeof document !== 'undefined' && document.dispatchEvent ) {
+                let id = message.id === undefined ? null : String(message.id);
+
+                if ( id && typeof CustomEvent === 'function' ) {
+                    try {
+                        // `qr-blur` یعنی اسکنر در گوشی بسته شد؛ پنل باید کارت را جمع کند.
+                        let name = message.type === 'qr-blur' ? 'meraat:qr-blur' : 'meraat:qr-focus';
+
+                        document.dispatchEvent(new CustomEvent(name, { detail: { id: id } }));
+                    } catch (error) {
+                        // مرورگرِ خیلی قدیمی؛ همین یک قابِ بی‌اهمیت رد می‌شود.
+                    }
+                }
+            }
+
+            return;
+        }
+
         if ( message.type !== 'change' || message.id === undefined )
             return;
 

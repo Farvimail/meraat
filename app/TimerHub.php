@@ -26,6 +26,13 @@ use App\Http\Controllers\TimerController;
 |   ۳) **بدونِ وابستگی.** بیلدِ PHP این پروژه `ext-curl` ندارد، پس با
 |      streamِ داخلیِ PHP فرستاده می‌شود.
 |
+| دو خبر از این‌جا می‌رود:
+|
+|   `announce()`  بعد از هر ثبت — پنل فقط همان کارت را می‌خواند.
+|   `spotlight()` وقتی کارمند در اپ اسکنرِ QR را باز می‌کند — پنل کارتِ او را
+|                 بزرگ و روشن نشان می‌دهد تا گوشی را مقابلش بگیرد.
+ *   `blur()`      وقتی کارمند اسکنر را می‌بندد — پنل کارت را همان لحظه جمع می‌کند.
+|
 | خاموش‌کردن: اگر `TIMER_HUB_SECRET` خالی باشد (پیش‌فرض)، این کلاس کامل
 | بی‌اثر است و سامانه مثل قبل کار می‌کند. پس استقرارِ کد بدون راه‌اندازیِ هاب
 | هیچ چیزی را نمی‌شکند.
@@ -44,19 +51,79 @@ class TimerHub
      */
     public static function announce($customerId, $dmy = null)
     {
-        $url = rtrim((string) config('services.timer_hub.url'), '/');
-        $secret = (string) config('services.timer_hub.secret');
-
-        if ($url === '' || $secret === '')
-            return;
-
-        $payload = json_encode([
+        self::publish([
             'dmy' => $dmy ?: TimerController::findToday(),
             'id' => (int) $customerId,
             // «انگشتِ تغییر» فقط برای شناختنِ نسخه در لاگِ هاب است؛ تصمیمِ
             // تازه‌سازی را پنل خودش با خواندنِ رکوردها می‌گیرد.
             'revision' => date('His'),
         ]);
+    }
+
+    /**
+     * «کارتِ من را روی صفحهٔ پنل بزرگ نشان بده».
+     *
+     * چه زمانی: کارمند در اپ روی «اسکن QR کارتِ من» (یا روی دکمهٔ قفل‌شدهٔ ثبت)
+     * می‌زند، اسکنر باز می‌شود و باید کارتِ خودش را روی صفحهٔ دفتر پیدا کند.
+     * بدونِ این، کارمند باید بین سی کارت بگردد و کدِ چرخان هم تا پیدا کند
+     * عوض می‌شود.
+     *
+     * چرا از راهِ سرور و نه سوکتِ خودِ اپ: کلیدِ مشترکِ هاب فقط در سرور است و
+     * اپ هرگز آن را نمی‌بیند؛ باز کردنِ یک مسیرِ عمومی برای اینکه هر کسی بتواند
+     * کارتِ هر کسی را روی صفحاتِ باز بزرگ کند هم لازم نیست. پس اپ از مسیرِ
+     * خودش (`/api/v1/qr/spotlight`) خبر می‌دهد و سرور آن را به هاب می‌رساند.
+     *
+     * @param  int|string $customerId
+     * @return bool  خبر واقعاً فرستاده شد؟ (هاب تنظیم نشده باشد → `false`)
+     */
+    public static function spotlight($customerId)
+    {
+        return self::publish([
+            'type' => 'qr-focus',
+            'id' => (int) $customerId,
+        ]);
+    }
+
+    /**
+     * «دیگر کارتِ مرا بزرگ نشان نده» — وقتی کارمند اسکنر را در گوشی می‌بندد.
+     *
+     * همان قراردادِ `spotlight` است، با نوعِ پیامِ `qr-blur`: پنل همان لحظه
+     * کارت را جمع می‌کند و کد به اندازهٔ عادی برمی‌گردد. بدونِ این خبر، کارتِ
+     * بزرگ‌شده تا پایانِ ۴۵ ثانیه می‌ماند؛ با آن، برگشت به حالتِ اول همان
+     * لحظه اتفاق می‌افتد. باز هم بهترین تلاش است — نرسیدنش بی‌خطر است.
+     *
+     * @param  int|string $customerId
+     * @return bool  خبر واقعاً فرستاده شد؟ (هاب تنظیم نشده باشد → `false`)
+     */
+    public static function blur($customerId)
+    {
+        return self::publish([
+            'type' => 'qr-blur',
+            'id' => (int) $customerId,
+        ]);
+    }
+
+    /** هاب تنظیم شده؟ (نشانی و کلید هر دو باید باشند) */
+    public static function enabled()
+    {
+        return rtrim((string) config('services.timer_hub.url'), '/') !== ''
+            && (string) config('services.timer_hub.secret') !== '';
+    }
+
+    /**
+     * فرستادنِ یک خبرِ کوتاه به هاب — تنها جایی که شبکه صدا زده می‌شود.
+     *
+     * @return bool  اگر هاب تنظیم نشده باشد `false` (خبری نرفت، چیزی هم نشکست)
+     */
+    private static function publish(array $payload)
+    {
+        if (! self::enabled())
+            return false;
+
+        $url = rtrim((string) config('services.timer_hub.url'), '/');
+        $secret = (string) config('services.timer_hub.secret');
+
+        $payload = json_encode($payload);
 
         try {
             $context = stream_context_create([
@@ -75,6 +142,9 @@ class TimerHub
             @file_get_contents($url . '/publish', false, $context);
         } catch (\Throwable $error) {
             // بی‌صدا: پنل مسیرِ دوره‌ای را دارد.
+            return false;
         }
+
+        return true;
     }
 }

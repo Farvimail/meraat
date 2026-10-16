@@ -16,13 +16,17 @@
  * همهٔ کارت‌های همان صفحه را با هم می‌گیرد (`/read/qr-codes`) — نه یک درخواست
  * برای هر کارت، که با ۳۰ کارمند یعنی ۳۰ درخواست در هر ۳۰ ثانیه.
  *
- * سه چیز که این فایل عمداً انجام می‌دهد:
+ * چهار چیز که این فایل عمداً انجام می‌دهد:
  *   ۱) در تبِ پنهان درخواست نمی‌زند و برگشت به تب را بلافاصله جبران می‌کند.
  *   ۲) اگر سرور خطا داد کدِ قبلی روی صفحه می‌ماند (کدِ کهنه بهتر از مربعِ
  *      خالی است؛ تازه‌سازیِ بعدی جبرانش می‌کند) و پنج ثانیه بعد دوباره تلاش
  *      می‌شود.
  *   ۳) اگر کسی به پنل وارد نشده باشد (۴۰۱)، مربع‌ها پنهان می‌شوند تا صفحهٔ
  *      بدونِ نشست، کدِ بی‌صاحب نشان ندهد.
+ *   ۴) «کارتِ من را بزرگ نشان بده»: کارمند که در اپ روی اسکنرِ QR می‌زند،
+ *      سرور از راهِ هابِ سوکت خبر می‌دهد (`timer.js` یک رویدادِ DOM می‌فرستد)
+ *      و کارتِ او روی همین صفحه بزرگ، روشن و بالاى فهرست می‌آید — تا بینِ
+ *      سی کارت نگردد و کدِ ۳۰ ثانیه‌ای پیش از رسیدنش عوض نشود.
  *
  * وابستگی‌ها: `public/js/vendor/toqr.js` (کدگذارِ QR، ساختهٔ scripts/vendor-toqr.mjs).
  */
@@ -38,6 +42,24 @@
 
     /** فاصلهٔ تلاشِ دوباره پس از خطا (میلی‌ثانیه). */
     var RETRY_MS = 5000;
+
+    /**
+     * تا کی کارتِ «نشانم بده» بزرگ بماند (میلی‌ثانیه).
+     *
+     * ۴۵ ثانیه = یک‌ونیم پنجرهٔ کد: کارمند وقت دارد گوشی را تنظیم کند و اگر
+     * کدِ اول از دستش رفت، تازه‌شدنِ بعدی هم داخلِ همین فرصت می‌آید.
+     */
+    var SPOTLIGHT_MS = 45000;
+
+    /**
+     * اندازهٔ هر ماژول روی canvas در حالتِ بزرگ‌شده (پیکسلِ داخلی).
+     *
+     * چرا جدا از `MODULE_PX`: با ۸ پیکسل، canvas روی ۳۳ ماژول می‌شود ۳۲۸×۳۲۸
+     * و CSS هم همان را روی عرضِ بزرگ می‌کشد، پس کدِ بزرگ‌شده تار نیست. اگر
+     * همان ۴ می‌ماند، دوربینِ گوشی در نبودِ تمرکزِ دقیق سخت‌تر می‌خواند — و
+     * حالتِ بزرگ‌شده دقیقاً وقتی می‌آید که باید بی‌دردسر خوانده شود.
+     */
+    var MODULE_PX_SPOTLIGHT = 8;
 
     /** متنِ دکمهٔ «تأیید دستی» در دو حالت — همان چیزی که مارک‌آپ هم می‌نویسد. */
     var CONFIRM_LABEL = 'تأیید دستیِ حضور';
@@ -81,14 +103,14 @@
     }
 
     /** کشیدنِ ماتریس روی canvas (سیاه روی سفید، پیکسلِ تمام). */
-    function paint(canvas, cells) {
+    function paint(canvas, cells, modulePx) {
         var ctx = canvas.getContext('2d');
 
         if (!ctx) {
             return;
         }
 
-        var px = Math.max(2, Math.round(MODULE_PX));
+        var px = Math.max(2, Math.round(modulePx || MODULE_PX));
         var side = cells.length * px;
 
         canvas.width = side;
@@ -215,6 +237,146 @@
             });
         }
 
+        /* ---------------- «کارتِ من را بزرگ نشان بده» ----------------
+           کارمند در اپ اسکنر را باز می‌کند؛ سرور به هاب می‌گوید و هاب به همهٔ
+           پنل‌های باز خبر می‌دهد (`timer.js` هم همان خبر را به یک رویدادِ DOM
+           تبدیل می‌کند). اینجا فقط صفحه‌ای که کارتِ همان کارمند را دارد واکنش
+           می‌دهد؛ بقیه بی‌صدا رد می‌شوند. */
+
+        /** آخرین ماتریسِ هر شناسه — برای اینکه بزرگ‌شدن، کدِ تازه بخواهد. */
+        var lastCells = {};
+
+        /** شناسهٔ کارتِ بزرگ‌شده و تایمرِ جمع‌کردنش. */
+        var focusedId = null;
+        var focusedTimer = null;
+
+        /** ظرفِ عکسِ یک نشانه: همان جایی که کلاسِ بزرگ‌نمایی می‌نشیند. */
+        function holder(badge) {
+            if (badge.closest) {
+                var found = badge.closest('.presence-photo');
+
+                if (found) {
+                    return found;
+                }
+            }
+
+            return badge.parentNode || null;
+        }
+
+        /** کدِ یک نشانه، با اندازهٔ ماژولِ مناسبِ حالتِ فعلی‌اش. */
+        function paintBadge(badge, cells) {
+            var canvas = badge.querySelector ? badge.querySelector('canvas') : null;
+            var box = holder(badge);
+            var zoomed = !!box && !!box.classList && box.classList.contains('is-spotlight');
+
+            if (canvas) {
+                paint(canvas, cells, zoomed ? MODULE_PX_SPOTLIGHT : MODULE_PX);
+            }
+        }
+
+        /** برداشتنِ بزرگ‌نمایی از کارتِ قبلی (کد هم به اندازهٔ معمولی برمی‌گردد). */
+        function clearFocus() {
+            if (focusedTimer) {
+                clearTimeout(focusedTimer);
+                focusedTimer = null;
+            }
+
+            var id = focusedId;
+
+            if (id === null) {
+                return;
+            }
+
+            focusedId = null;
+
+            (byId[id] || []).forEach(function (badge) {
+                var box = holder(badge);
+
+                if (box && box.classList) {
+                    box.classList.remove('is-spotlight');
+                }
+
+                if (lastCells[id]) {
+                    paintBadge(badge, lastCells[id]);
+                }
+            });
+        }
+
+        /**
+         * بزرگ و روشن کردنِ کارتِ یک کارمند.
+         *
+         * خروجی `false` یعنی «این صفحه کارتش را ندارد» — نه خطا. صفحه‌های
+         * دیگری که همان کارت را دارند خودشان واکنش می‌دهند و همین صفحه نباید
+         * چیزی بگوید (مثلاً صفحهٔ مدیریت که اصلاً QR ندارد).
+         */
+        function focusCard(id) {
+            var badgesForId = byId[id] || [];
+
+            if (!badgesForId.length) {
+                return false;
+            }
+
+            clearFocus();
+            focusedId = id;
+
+            badgesForId.forEach(function (badge) {
+                var box = holder(badge);
+
+                if (box && box.classList) {
+                    box.classList.add('is-spotlight');
+                }
+
+                if (lastCells[id]) {
+                    paintBadge(badge, lastCells[id]);
+                }
+
+                // کارت ممکن است پایینِ فهرست باشد؛ کارمند نباید اسکرول کند.
+                if (badge.scrollIntoView) {
+                    try {
+                        badge.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    } catch (error) {
+                        badge.scrollIntoView();
+                    }
+                }
+            });
+
+            if (focusedTimer) {
+                clearTimeout(focusedTimer);
+            }
+
+            focusedTimer = setTimeout(clearFocus, SPOTLIGHT_MS);
+
+            return true;
+        }
+
+        /** رویدادی که `timer.js` از پیامِ `qr-focus` سوکت می‌سازد. */
+        function onQrFocus(event) {
+            var id = event && event.detail ? String(event.detail.id) : '';
+
+            if (id) {
+                focusCard(id);
+            }
+        }
+
+        /**
+         * رویدادی که `timer.js` از پیامِ `qr-blur` سوکت می‌سازد — اسکنر بسته شد.
+         *
+         * فقط کارتِ همین شناسه جمع می‌شود؛ خبرِ بستنِ اسکنرِ همکار به ما ربطی
+         * ندارد. اگر کارتی همین لحظه بزرگ نشده باشد، این خبر بی‌اثر است.
+         */
+        function onQrBlur(event) {
+            var id = event && event.detail ? String(event.detail.id) : '';
+
+            if (id && id === focusedId) {
+                clearFocus();
+            }
+        }
+
+        if (document.addEventListener) {
+            document.addEventListener('meraat:qr-focus', onQrFocus);
+            document.addEventListener('meraat:qr-blur', onQrBlur);
+        }
+
         /** کشیدنِ کدها روی همهٔ نشانه‌های یک شناسه. */
         function draw(id, code) {
             var cells = qrCells(code);
@@ -223,12 +385,10 @@
                 return;
             }
 
-            (byId[id] || []).forEach(function (badge) {
-                var canvas = badge.querySelector('canvas');
+            lastCells[id] = cells;
 
-                if (canvas) {
-                    paint(canvas, cells);
-                }
+            (byId[id] || []).forEach(function (badge) {
+                paintBadge(badge, cells);
             });
         }
 
@@ -293,6 +453,12 @@
 
                         if (info) {
                             markConfirmed(id, { method: info.method, at: info.at });
+
+                            // تأیید شد → دیگر لازم نیست کارتِ او بزرگ بماند؛
+                            // جمع‌کردنِ فوری همان «کارم تمام شد» را می‌رساند.
+                            if (id === focusedId) {
+                                clearFocus();
+                            }
                         } else {
                             clearConfirmed(id);
                         }
@@ -378,7 +544,12 @@
     }
 
     // برای تستِ بدونِ مرورگر (scripts/tests/presence-qr.test.mjs).
-    window.MeraatPresenceQr = { qrCells: qrCells, QUIET: QUIET };
+    window.MeraatPresenceQr = {
+        qrCells: qrCells,
+        QUIET: QUIET,
+        SPOTLIGHT_MS: SPOTLIGHT_MS,
+        MODULE_PX_SPOTLIGHT: MODULE_PX_SPOTLIGHT,
+    };
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', start);

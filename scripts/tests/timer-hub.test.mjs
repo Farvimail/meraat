@@ -139,6 +139,41 @@ try {
   const ignored = await publish(port, { dmy: '16102026', id: 99, revision: '1:901' }, SECRET);
   assert.equal((await ignored.json()).delivered, 0, 'کارتِ خارج از فهرست نباید ارسال شود');
 
+  // ۴٫۵) «کارتِ فلانی را بزرگ نشان بده» → به سوکتی که آن کارت را watch نکرده هم می‌رسد.
+  // کارمند پشتِ گوشی ایستاده و کدِ خودش را روی صفحه می‌خواهد؛ مشروط کردنِ این
+  // پیام به فهرستِ کارت‌های صفحه یعنی صفحه‌ای که فهرستش را تازه نداده، هیچ
+  // واکنشی نشان نمی‌دهد. پس اینجا ۹۹ (خارج از watch) باید برسد.
+  const focusPromise = nextMessage(socket);
+
+  const focused = await publish(port, { type: 'qr-focus', id: 99 }, SECRET);
+  assert.equal(focused.status, 200, 'پیامِ «نشانم بده» باید پذیرفته شود');
+  assert.equal((await focused.json()).delivered, 1, 'باید به پنلِ باز برسد');
+
+  const focus = await focusPromise;
+  assert.ok(focus, 'پیامِ بزرگ‌نمایی باید برسد');
+  assert.equal(focus.type, 'qr-focus', 'نوعِ پیام باید qr-focus باشد');
+  assert.equal(focus.id, 99, 'شناسهٔ همان کارت باید دست‌نخورده برسد');
+
+  // ۴٫۶) «جمع کن» (qr-blur) — وقتی کارمند اسکنر را در گوشی می‌بندد؛ همان مسیر و همان قرارداد.
+  const blurPromise = nextMessage(socket);
+
+  const blurred = await publish(port, { type: 'qr-blur', id: 99 }, SECRET);
+  assert.equal(blurred.status, 200, 'پیامِ «جمع کن» باید پذیرفته شود');
+  assert.equal((await blurred.json()).delivered, 1, 'qr-blur هم باید به پنلِ باز برسد');
+
+  const blur = await blurPromise;
+  assert.ok(blur, 'پیامِ جمع‌کردن باید برسد');
+  assert.equal(blur.type, 'qr-blur', 'نوعِ پیام باید qr-blur باشد');
+  assert.equal(blur.id, 99, 'شناسهٔ qr-blur هم باید دست‌نخورده برسد');
+
+  // بدونِ شناسه → رد؛ مثلِ qr-focus.
+  const blurNoId = await publish(port, { type: 'qr-blur' }, SECRET);
+  assert.equal(blurNoId.status, 422, 'qr-blur بدونِ شناسه باید رد شود');
+
+  // بدونِ شناسه → رد؛ وگرنه پنل کارتِ نامعلوم را بزرگ می‌کرد.
+  const noId = await publish(port, { type: 'qr-focus' }, SECRET);
+  assert.equal(noId.status, 422, 'qr-focus بدونِ شناسه باید رد شود');
+
   // ۵) بدنهٔ خراب → ۴۲۲، نه سقوط
   const bad = await publish(port, { nope: true }, SECRET);
   assert.equal(bad.status, 422, 'بدنهٔ خراب باید رد شود');
@@ -177,7 +212,9 @@ try {
   assert.equal(left.count, 1, 'بعد از رفتنِ پنلِ دوم، عدد باید ۱ شود');
 
   socket.close();
-  console.log('✔ هاب: وصل شدن، رساندنِ تغییر، ردِ کلیدِ نادرست، health و تعدادِ پنل‌ها');
+  console.log(
+    '✔ هاب: وصل شدن، رساندنِ تغییر، بزرگ‌نماییِ کارت، ردِ کلیدِ نادرست، health و تعدادِ پنل‌ها',
+  );
 } finally {
   child.kill('SIGTERM');
 }

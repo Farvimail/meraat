@@ -28,6 +28,7 @@ export type ApiErrorCode =
   | 'device_already_bound'
   | 'device_mismatch'
   | 'outside_office_network'
+  | 'presence_required'
   | 'duplicate_punch'
   | 'biometric_required'
   | 'gps_required'
@@ -62,6 +63,7 @@ const CODE_BY_SERVER_ERROR: Record<string, ApiErrorCode> = {
   device_already_bound: 'device_already_bound',
   device_mismatch: 'device_mismatch',
   outside_office_network: 'outside_office_network',
+  presence_required: 'presence_required',
   duplicate_punch: 'duplicate_punch',
   biometric_required: 'biometric_required',
   gps_required: 'gps_required',
@@ -197,6 +199,19 @@ export interface ApiClient {
    * ندارد.
    */
   confirmPresence(code: string): Promise<QrConfirmResponse>;
+  /**
+   * «کارتِ من را روی صفحهٔ پنل بزرگ نشان بده».
+   *
+   * وقتی اسکنر باز می‌شود صدا زده می‌شود تا کارمند بین سی کارتِ صفحهٔ دفتر
+   * نگردد و کدِ ۳۰ ثانیه‌ای پیش از رسیدنش عوض نشود. قراردادش بهترین‌تلاش است:
+   * `sent: false` یعنی هابِ پنل تنظیم/روشن نیست و اسکن معمولی سر جایش است.
+   */
+  spotlightPresence(close?: boolean): Promise<SpotlightResponse>;
+}
+
+/** پاسخِ «نشانم بده» — `sent` یعنی هابِ پنل خبر را پذیرفت. */
+export interface SpotlightResponse {
+  sent: boolean;
 }
 
 /** یک فایلِ عکس برای `multipart/form-data`. */
@@ -439,6 +454,12 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
       request<QrConfirmResponse>('/qr/confirm', {
         method: 'POST',
         body: JSON.stringify({ code }),
+      }),
+
+    spotlightPresence: (close) =>
+      request<SpotlightResponse>('/qr/spotlight', {
+        method: 'POST',
+        body: JSON.stringify({ state: close ? 'close' : 'open' }),
       }),
   };
 }
