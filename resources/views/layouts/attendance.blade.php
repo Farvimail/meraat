@@ -69,6 +69,8 @@
         </nav>
 
         <div class="att-topbar-end">
+            @include('partials.timer-hub-chip')
+
             @include('partials.date-jump')
 
             @if ($attUser)

@@ -32,31 +32,10 @@ function delLoading(sign, target, content)
         .innerHTML = ((content=="pause")?"توقف":"شروع");
 }
 
-function timerStatus(array)
-{
-    array = JSON.parse(array);
-    if ( array.toString() != [] )
-    {
-        if ( array.length > 1 )
-            array = array.reverse();
-        return array[0].pause;
-    }
-}
-
-function sumParts(array)
-{
-    array = JSON.parse(array);
-    if ( array.toString() != [] )
-    {
-        sum = 0;
-        point = +1;
-        array.reverse().forEach(b =>{
-            b.start?point=+1:point=-1;
-            sum+= new Date(b.date)*point;
-        })
-        return sum>0?sum:sum*-1;
-    }
-}
+/* حسابِ تایمر (`timerWorked`/`Interval`) و اندازه‌گیری اختلافِ ساعتِ سرور با
+   مرورگر در `js/timer.js` هستند. یک کپیِ دومِ همین‌ها اینجا بود که همیشه با
+   نسخهٔ timer.js بازنویسی می‌شد و فقط باعث سردرگمی دربارهٔ منبعِ حساب تایمر
+   بود؛ حذف شد تا حسابِ تایمر یک جا باشد. */
 
 $(document).ready(function(){
     $(document).on('click', 'button[id^="timer-"]', function(){
@@ -80,12 +59,12 @@ $(document).ready(function(){
             },
             success: function(data, textStatus, xhr) {
                 console.log("Success: "+xhr.status);
-                /* manager Timer */
+                /* manager Timer — با ساعتِ سرور، همان‌طور که اپ حساب می‌کند */
+                timerMeasureSkew(xhr);
                 Interval("dt"+id,
-                    sumParts(data),
+                    timerWorked(data),
                     ".digital-timer-"+id,
-                    timerStatus(data));
-                timerStatus(data)?clearInterval(eval("dt"+id)):null;
+                    timerClockSkew);
                 let title = ((target.split('-')[1]=="pause")?"توقف":"شروع");
                 let titleWithName = btnName ? title+' — '+btnName : title;
                 /* create Toast */

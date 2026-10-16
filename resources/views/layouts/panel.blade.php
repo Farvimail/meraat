@@ -157,6 +157,8 @@
             </h1>
 
             <div class="panel-topbar-end">
+                @include('partials.timer-hub-chip')
+
                 @include('partials.date-jump')
 
                 <a class="panel-iconbtn" href="{{ route('logout') }}" title="خروج"

@@ -617,11 +617,22 @@ use Illuminate\Support\Facades\Auth;
                                         </ul>
                                     </div>
                                 </div>
+                                {{-- هر کارت باید «دیده» شود، حتی روزی که هیچ رکوردی ندارد:
+                                     اولین ثبتِ آن روز با گوشی انجام می‌شود و اگر کارت
+                                     نگهبان نداشته باشد، تا رفرشِ دستی دیده نمی‌شود.
+                                     کارمندِ بی‌ثبت چیزی برای خواندن ندارد، پس فقط
+                                     ثبتش می‌کنیم (`watchTimer`) و عددش همان صفرِ
+                                     رسم‌شده می‌ماند. --}}
                                 @if ( !empty(TimerController::check($item->customer_id)) )
 
                                     <script type="text/javascript">
                                         var dt{{$item->customer_id}};
                                         runTimer({{$item->customer_id}}, @json($item->name));
+                                    </script>
+                                @else
+
+                                    <script type="text/javascript">
+                                        watchTimer({{$item->customer_id}}, @json($item->name));
                                     </script>
                                 @endif
                             @endforeach

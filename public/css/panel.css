@@ -9,18 +9,39 @@
 :root {
     --panel-nav-w: 264px;
 
-    --panel-nav-bg-1: #132033;
-    --panel-nav-bg-2: #0d1727;
-    --panel-nav-fg: #a7b6ca;
-    --panel-nav-muted: #7d8ea6;
+    /* رنگ‌ها همان پالتِ برند هستند که اپ هم از آن می‌آید (`mobile/src/theme.ts`:
+       brand #0F6B3F، brandDark #0A4F2E، brandDeep #08301E، accent #1E9E5A).
+       نوار ناوبری قبلاً سرمهٔ #132033 با تأکیدِ زردِ #f0b429 بود؛ هیچ‌کدام از آن
+       دو جای دیگری از سامانه نبودند و پنل را از اپ جدا می‌انداختند. */
+    --panel-nav-bg-1: #0a4f2e;
+    --panel-nav-bg-2: #08301e;
+    --panel-nav-fg: rgba(255, 255, 255, .78);
+    --panel-nav-muted: rgba(255, 255, 255, .58);
 
-    --panel-accent: #f0b429;
-    --panel-accent-soft: rgba(240, 180, 41, .14);
+    /* تأکید روی زمینهٔ تیره: سبزِ روشنِ همان خانواده (نه زرد) */
+    --panel-accent: #4ed08a;
+    --panel-accent-soft: rgba(78, 208, 138, .16);
 
-    --panel-bg: #eef1f7;
-    --panel-line: #e3e8f0;
-    --panel-ink: #1f2a3d;
-    --panel-muted: #6b7a90;
+    --panel-bg: #f1f4f3;
+    --panel-line: #e3e9e5;
+    /* خطِ قوی‌تر برای حالتِ هاور (قبلاً سرمه‌ایِ #c9d6ea بود) */
+    --panel-line-strong: #cddbd3;
+    --panel-ink: #10231a;
+    --panel-muted: #6b7c73;
+
+    /* پیوند‌ها و حالتِ فعال در محتوای روشن — جای سرمهٔ Bootstrap */
+    --panel-link: #0f6b3f;
+    --panel-link-strong: #0a4f2e;
+    --panel-link-soft: #e6f2eb;
+
+    /* قرمز و هشدارِ برند — همان دو تایی که اپ در `mobile/src/theme.ts`
+       دارد (`danger #B4342A`، `warning #8A6116`). آبی/زردِ پیش‌فرضِ بوت‌استرپ
+       جای دیگری از سامانه نبود و پنل را از اپ جدا می‌انداخت. */
+    --panel-danger: #b4342a;
+    --panel-danger-soft: #fbeae8;
+    --panel-warning: #8a6116;
+    --panel-warning-soft: #fdf3e2;
+
     --panel-radius: 14px;
 }
 
@@ -66,7 +87,7 @@ body.panel-page::before {
 
     color: var(--panel-nav-fg);
     background: linear-gradient(180deg, var(--panel-nav-bg-1) 0%, var(--panel-nav-bg-2) 100%);
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, .05), 0 24px 45px -35px rgba(9, 20, 38, .95);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, .05), 0 24px 45px -35px rgba(4, 26, 16, .9);
 }
 
 .panel-brand {
@@ -86,7 +107,7 @@ body.panel-page::before {
     border-radius: 12px;
     background: #fff;
     object-fit: contain;
-    box-shadow: 0 8px 18px -10px rgba(240, 180, 41, .95);
+    box-shadow: 0 8px 18px -10px rgba(78, 208, 138, .55);
 }
 
 .panel-brand-text {
@@ -227,7 +248,7 @@ body.panel-page::before {
     padding: .05rem .45rem;
     border-radius: 99px;
     background: rgba(255, 255, 255, .1);
-    color: #dbe4f1;
+    color: rgba(255, 255, 255, .82);
     font-size: .7rem;
 }
 
@@ -283,7 +304,7 @@ body.panel-page::before {
     position: fixed;
     inset: 0;
     z-index: 1035;
-    background: rgba(9, 14, 25, .45);
+    background: rgba(8, 40, 25, .5);
 }
 
 /* ------------------------------------------------------ ستون محتوا */
@@ -370,6 +391,76 @@ body.panel-page::before {
 .panel-chip svg {
     width: 15px;
     height: 15px;
+}
+
+/* -------------------------------------- چیپِ وضعیتِ کانالِ زنده
+
+   مارک‌آپ را `partials/timer-hub-chip.blade.php` می‌نویسد (هم در پنل مدیریت
+   و هم در صفحهٔ حضور و غیاب) و متنش را `public/js/timer.js` عوض می‌کند؛
+   تنها چیزی که اینجا تعریف می‌شود شکل و رنگِ دو حالت است:
+
+     data-state="live"    → کانالِ WebSocket باز است (سبزِ برند)
+     data-state="polling" → سوکت نیست، تازه‌سازی دوره‌ای است (خاکستری)
+
+   رنگ عمداً از پالتِ خودِ پنل می‌آید (نه سبز/قرمزِ وضعیتِ تقویم) تا با
+   زبانِ رنگیِ بقیهٔ نوار بالا یکی باشد.
+
+   در حالتِ «زنده» نقطه نبض می‌گیرد (حلقهٔ سبز که از خودش بیرون می‌زند +
+   نفسِ ملایمِ شفافیت). چرا لازم است: تغییرِ متن را کاربر فقط وقتی می‌بیند که
+   نگاهش همان لحظه وسطِ چیپ باشد؛ حرکت چشم را می‌گیرد و بی‌آنکه چیزی نوشته
+   شود می‌گوید «این کانال همین حالا باز است». در حالتِ «دوره‌ای» هیچ حرکتی
+   نیست: سکونِ خاکستری خودش یعنی «فقط درخواستِ دوره‌ای».
+
+   حرکت کاملاً تزئینی است؛ پس اگر کاربر Reduce Motion روشن کرده باشد، خاموش
+   می‌شود و همان سایهٔ ثابتِ سبز جای نبض را می‌گیرد. */
+.panel-live {
+    gap: .45rem;
+}
+
+.panel-live-dot {
+    flex: 0 0 7px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--panel-muted);
+}
+
+.panel-live[data-state="live"] {
+    border-color: #cfe6da;
+    background: var(--panel-link-soft);
+    color: var(--panel-link-strong);
+}
+
+@keyframes panel-live-ring {
+    0%   { box-shadow: 0 0 0 0 rgba(15, 107, 63, .38); }
+    70%  { box-shadow: 0 0 0 7px rgba(15, 107, 63, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(15, 107, 63, 0); }
+}
+
+@keyframes panel-live-breathe {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: .62; }
+}
+
+.panel-live[data-state="live"] .panel-live-dot {
+    background: var(--panel-link);
+    animation: panel-live-ring 2.4s ease-out infinite,
+               panel-live-breathe 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .panel-live[data-state="live"] .panel-live-dot {
+        animation: none;
+        box-shadow: 0 0 0 3px rgba(15, 107, 63, .16);
+    }
+}
+
+.panel-live-peers {
+    color: var(--panel-muted);
+}
+
+.panel-live[data-state="live"] .panel-live-peers {
+    color: var(--panel-link);
 }
 
 .panel-iconbtn {
@@ -459,25 +550,25 @@ body.panel-page .panel-content .card .card-header small a {
 }
 
 body.panel-page .panel-content .card .card-header small a:hover {
-    color: #0b62d6;
+    color: var(--panel-link);
 }
 
 /* کارت‌های تودرتو (مثل کارت هر کارمند در تقویم‌ها) سبک‌ترند */
 body.panel-page .panel-content .card .card .card {
-    border-color: #eaeef5;
+    border-color: #e8eeea;
     box-shadow: none;
     margin-bottom: 0;
 }
 
 body.panel-page .panel-content .card .card > .card-header {
-    background: #f8fafd;
+    background: #f7f9f8;
     font-size: .9rem;
     font-weight: 600;
 }
 
 body.panel-page .panel-content .card-footer {
     border-top: 1px solid var(--panel-line);
-    background: #fbfcfe;
+    background: #fafcfb;
     border-radius: 0 0 var(--panel-radius) var(--panel-radius) !important;
 }
 
@@ -501,29 +592,29 @@ body.panel-page .panel-content .table thead th {
 }
 
 body.panel-page .panel-content .table-striped tbody tr:nth-of-type(odd) {
-    background-color: #f9fbfe;
+    background-color: #f7f9f8;
 }
 
 body.panel-page .panel-content .table tbody tr:hover {
-    background-color: #f4f8ff;
+    background-color: #f2f6f4;
 }
 
 body.panel-page .form-control,
 body.panel-page .form-select {
-    border-color: #dde3ec;
+    border-color: #dbe3de;
     border-radius: 10px;
 }
 
 body.panel-page .form-control:focus,
 body.panel-page .form-select:focus {
-    border-color: #b9cdf0;
-    box-shadow: 0 0 0 .18rem rgba(11, 98, 214, .12);
+    border-color: #a8cfb8;
+    box-shadow: 0 0 0 .18rem rgba(15, 107, 63, .12);
 }
 
 body.panel-page .input-group-text {
-    border-color: #dde3ec;
+    border-color: #dbe3de;
     border-radius: 10px;
-    background: #f6f8fc;
+    background: #f4f7f5;
     color: var(--panel-muted);
     font-size: .82rem;
 }
@@ -587,6 +678,131 @@ body.panel-page .btn-sm {
     border-radius: 8px;
 }
 
+/* ------------------------------------------- کنترل‌های رنگیِ بوت‌استرپ
+
+   چرا این بلوک لازم شد: خودِ پوسته (نوار ناوبری، کارت، جدول، تب) با پالتِ
+   برند بازنویسی شده بود، ولی عناصری که کلاسشان را از خودِ صفحه می‌گیرند
+   هنوز رنگِ پیش‌فرضِ بوت‌استرپ را می‌کشیدند و در نگاه اول «از یک برنامهٔ دیگر»
+   به نظر می‌رسیدند:
+
+     • پیوندهای داخل محتوا (حذف/گزارش/فعالیت/…) آبیِ `#3490dc` بودند.
+     • چک‌باکس و سوییچِ فعال (`form-check-input` و `custom-control-input`)
+       همان آبی را داشتند.
+     • دکمه‌های خطیِ ابزارها (`btn-outline-primary`) آبیِ خالص بودند.
+
+   چه چیزی عمداً دست‌نخورده ماند: `btn-primary` / `btn-success` /
+   `btn-danger` / `btn-warning` / `btn-secondary` — این پنج، رنگِ **وضعیت** در
+   مربع‌های روزِ تقویم‌اند (مرخصی/حضور/غیبت/خاص/بدون‌رکورد) و خواننده از همین
+   تفاوتِ رنگ، وضعیتِ ماه را می‌خواند؛ سبزِ برند کردنِ «مرخصی» آن را با
+   «حضور» یکی می‌کرد. پس پالتِ برند فقط جایی نشسته که رنگ معنا ندارد. */
+
+body.panel-page .panel-content a:not(.btn):not(.nav-link):not(.page-link) {
+    color: var(--panel-link);
+}
+
+body.panel-page .panel-content a:not(.btn):not(.nav-link):not(.page-link):hover {
+    color: var(--panel-link-strong);
+}
+
+/* عددِ روزِ تقویم داخل مربع می‌نشیند؛ آنجا رنگِ متن مالِ خودِ مربع است
+   (سفید روی سبز/قرمز/زرد)، پس قاعدهٔ بالا نباید به آن دست بزند. */
+body.panel-page .att-content .col a,
+body.panel-page .att-days .col a {
+    color: inherit;
+    text-decoration: none;
+}
+
+/* چک‌باکس و سوییچِ فعال — بوت‌استرپ ۵ */
+body.panel-page .form-check-input:checked {
+    background-color: var(--panel-link);
+    border-color: var(--panel-link);
+}
+
+body.panel-page .form-check-input:focus {
+    border-color: #a8cfb8;
+    box-shadow: 0 0 0 .18rem rgba(15, 107, 63, .16);
+}
+
+/* همان چیز در بوت‌استرپ ۴ (`custom-control`) که app.css هم دارد */
+body.panel-page .custom-control-input:checked ~ .custom-control-label::before,
+body.panel-page .custom-control-input:focus ~ .custom-control-label::before {
+    border-color: var(--panel-link);
+    background-color: var(--panel-link);
+}
+
+body.panel-page .custom-control-input:focus ~ .custom-control-label::before {
+    box-shadow: 0 0 0 .18rem rgba(15, 107, 63, .16);
+}
+
+/* دکمه‌های خطیِ ابزارها («ورود مدیر»، «فعال کردن این روز»، «بازگردانی») */
+body.panel-page .btn-outline-primary {
+    color: var(--panel-link);
+    border-color: #a8cfb8;
+}
+
+body.panel-page .btn-outline-primary:hover,
+body.panel-page .btn-outline-primary:focus,
+body.panel-page .btn-outline-primary:not(:disabled):not(.disabled):active {
+    border-color: var(--panel-link);
+    background-color: var(--panel-link);
+    color: #fff;
+}
+
+body.panel-page .btn-outline-secondary {
+    color: var(--panel-muted);
+    border-color: var(--panel-line-strong);
+}
+
+body.panel-page .btn-outline-secondary:hover,
+body.panel-page .btn-outline-secondary:focus {
+    border-color: var(--panel-line-strong);
+    background-color: #eef2f0;
+    color: var(--panel-ink);
+}
+
+body.panel-page .btn-outline-danger {
+    color: var(--panel-danger);
+    border-color: #e6bdb8;
+}
+
+body.panel-page .btn-outline-danger:hover,
+body.panel-page .btn-outline-danger:focus {
+    border-color: var(--panel-danger);
+    background-color: var(--panel-danger);
+    color: #fff;
+}
+
+body.panel-page .btn-light {
+    border-color: var(--panel-line);
+    background-color: #fff;
+    color: var(--panel-ink);
+}
+
+body.panel-page .btn-light:hover,
+body.panel-page .btn-light:focus {
+    border-color: var(--panel-line-strong);
+    background-color: #f4f7f5;
+}
+
+/* پیام‌های سیستمی: سبزِ برند و هشدارِ برند جای زرد و سبزِ پیش‌فرض */
+body.panel-page .alert-success {
+    border-color: #cfe6da;
+    background-color: var(--panel-link-soft);
+    color: #0b5230;
+}
+
+body.panel-page .alert-warning {
+    border-color: #efe0c4;
+    background-color: var(--panel-warning-soft);
+    color: var(--panel-warning);
+}
+
+body.panel-page .alert-danger {
+    border-color: #f0cdc9;
+    background-color: var(--panel-danger-soft);
+    color: var(--panel-danger);
+}
+
 body.panel-page .panel-content .nav-tabs {
     width: auto;
     border-bottom: 1px solid var(--panel-line);
@@ -601,9 +817,9 @@ body.panel-page .panel-content .nav-tabs .nav-link {
 }
 
 body.panel-page .panel-content .nav-tabs .nav-link.active {
-    border-bottom-color: #0b62d6;
+    border-bottom-color: var(--panel-link);
     background: transparent;
-    color: #0b62d6;
+    color: var(--panel-link);
     font-weight: 600;
 }
 
@@ -619,15 +835,15 @@ body.panel-page .panel-content code {
 }
 
 .panel-chip-btn:hover {
-    border-color: #c9d6ea;
+    border-color: var(--panel-line-strong);
     color: var(--panel-ink);
     text-decoration: none;
 }
 
 .panel-chip-btn.is-override {
-    border-color: #ecc264;
-    background: #fff8e4;
-    color: #8a5a00;
+    border-color: #e8d8b6;
+    background: #fdf3e2;
+    color: #8a6116;
     font-weight: 600;
 }
 
@@ -646,7 +862,7 @@ body.panel-page .panel-content code {
     padding: .95rem;
     border: 1px solid var(--panel-line);
     border-radius: 14px;
-    box-shadow: 0 22px 45px -30px rgba(9, 20, 38, .7);
+    box-shadow: 0 22px 45px -30px rgba(4, 26, 16, .55);
 }
 
 .panel-datepick-title {
@@ -692,7 +908,7 @@ body.panel-page .panel-content code {
 
 .panel-datepick-value:hover,
 .panel-datepick-value:focus {
-    border-color: #c9d6ea;
+    border-color: var(--panel-line-strong);
     color: var(--panel-ink);
 }
 
@@ -734,7 +950,7 @@ body.panel-page .panel-content code {
 }
 
 .jdp-nav:hover {
-    border-color: #c9d6ea;
+    border-color: var(--panel-line-strong);
     color: var(--panel-ink);
 }
 
@@ -770,7 +986,7 @@ body.panel-page .panel-content code {
 }
 
 .jdp-day:hover {
-    background: #eef4ff;
+    background: #eef4f0;
 }
 
 .jdp-day.is-empty {
@@ -779,18 +995,18 @@ body.panel-page .panel-content code {
 }
 
 .jdp-day.is-today {
-    box-shadow: inset 0 0 0 1px #c9d6ea;
+    box-shadow: inset 0 0 0 1px var(--panel-line-strong);
     font-weight: 700;
 }
 
 .jdp-day.is-sel {
-    background: #2f6bff;
+    background: var(--panel-link);
     color: #fff;
     font-weight: 700;
 }
 
 .jdp-day.is-sel:hover {
-    background: #2f6bff;
+    background: var(--panel-link);
 }
 
 .jdp-foot {
@@ -812,7 +1028,7 @@ body.panel-page .panel-content code {
 }
 
 .jdp-today:hover {
-    border-color: #c9d6ea;
+    border-color: var(--panel-line-strong);
     color: var(--panel-ink);
 }
 
@@ -823,9 +1039,9 @@ body.panel-page .panel-content code {
     gap: .7rem;
     flex-wrap: wrap;
     padding: .7rem 1.5rem;
-    border-bottom: 1px solid #f0dca4;
-    background: #fff5da;
-    color: #7a5200;
+    border-bottom: 1px solid #e8d8b6;
+    background: #fdf3e2;
+    color: #8a6116;
     font-size: .85rem;
 }
 
@@ -833,7 +1049,7 @@ body.panel-page .panel-content code {
     flex: 0 0 20px;
     width: 20px;
     height: 20px;
-    color: #c98600;
+    color: #8a6116;
 }
 
 .panel-datebar-text strong {
@@ -842,7 +1058,7 @@ body.panel-page .panel-content code {
 
 .panel-datebar-text small {
     display: block;
-    color: #9b7a34;
+    color: #a08453;
     font-size: .75rem;
 }
 
@@ -900,14 +1116,14 @@ body.panel-page .panel-content code {
 }
 
 .att-nav-link:hover {
-    background: #f1f5fb;
+    background: var(--panel-link-soft);
     color: var(--panel-ink);
     text-decoration: none;
 }
 
 .att-nav-link.is-active {
-    background: #eaf1fd;
-    color: #0b62d6;
+    background: var(--panel-link-soft);
+    color: var(--panel-link);
     font-weight: 600;
 }
 
@@ -930,7 +1146,7 @@ body.panel-page .panel-content code {
     width: 100%;
     height: 200px;
     object-fit: cover;
-    background: #eef1f7;
+    background: var(--panel-line);
 }
 
 .att-content .card-title {
@@ -949,9 +1165,9 @@ body.panel-page .panel-content code {
     width: auto;
     margin: .2rem .4rem .8rem;
     padding: .65rem 1rem;
-    border: 1px solid #e3ecf9;
+    border: 1px solid var(--panel-line);
     border-radius: 12px;
-    background: linear-gradient(180deg, #f8fbff, #eef4fd);
+    background: linear-gradient(180deg, #f8fbf9, #eef4f0);
 }
 
 .att-content .digital-timer {
@@ -1016,7 +1232,7 @@ body.panel-page .card-footer .btn-group > .btn {
    (`btn-success` حضور، `btn-danger` غیبت، `btn-warning` خاص، …) را خنثی
    می‌کرد و همهٔ روزها خاکستریِ یکسان دیده می‌شدند. */
 .att-content .row > .col:not([class*="btn-"]) {
-    background: #e9eef6;
+    background: #e8eeea;
     color: #64748b;
 }
 
@@ -1024,13 +1240,13 @@ body.panel-page .card-footer .btn-group > .btn {
    باشد. قبلاً این قاعده روی رنگ کلاس وضعیت می‌نشست و روزِ «خاص روی تعطیل»
    در صفحهٔ اصلی برخلاف میزکار زرد دیده نمی‌شد. */
 .att-content .row > .col.cln-holiday:not([class*="btn-"]) {
-    background: #64748b;
+    background: #5b6b64;
     color: #fff;
 }
 
 .att-content .row > .col.cln-disabled {
-    background: #dfe5ee;
-    color: #8d99ad;
+    background: #e7ecea;
+    color: #93a09a;
 }
 
 /* خانه‌های روزهای ماه در «فعالیت ماهانه» */
@@ -1053,8 +1269,8 @@ body.panel-page .card-footer .btn-group > .btn {
 }
 
 .att-days .col.cln-disabled {
-    background: #eef1f7;
-    color: #93a1b6;
+    background: #eef1f0;
+    color: #97a29c;
 }
 
 /* خانه‌های روز باید مربع باشند: عرض `.col` برابر ۱۶٪ ردیف است و ارتفاع قبلاً
@@ -1135,8 +1351,9 @@ body.panel-page .toasts-stack {
 }
 
 @media (max-width: 575.98px) {
-    /* تاریخ فعال سامانه روی موبایل هم می‌ماند (پرش بین ماه‌ها بدون آن ممکن
-       نیست)؛ در عوض برندِ فرعی و سربرگ‌های سریع که فقط تزئینی‌اند جمع می‌شوند. */
+    /* تاریخ فعال سامانه و چیپِ وضعیت روی موبایل هم می‌مانند: اولی برای
+       پرش بین ماه‌ها لازم است و دومی همان چیزی است که کاربر دنبالش است؛
+       در عوض برندِ فرعی و سربرگ‌های سریع که فقط تزئینی‌اند جمع می‌شوند. */
     .att-brand-text small,
     .att-nav {
         display: none;
@@ -1247,8 +1464,8 @@ body.panel-page .toasts-stack {
 }
 
 .auth-field .form-control:focus {
-    border-color: #0d6efd;
-    box-shadow: 0 0 0 3px rgba(13, 110, 253, .15);
+    border-color: var(--panel-link);
+    box-shadow: 0 0 0 3px rgba(15, 107, 63, .15);
 }
 
 .auth-remember {
@@ -1274,6 +1491,90 @@ body.panel-page .toasts-stack {
     font-size: .75rem;
 }
 
+/* ------------------------------------ صفحهٔ ورود: قطعِ اتصال
+
+   کارت همیشه در HTML است و js/auth-connection.js با برداشتنِ `hidden`
+   نشانش می‌دهد؛ پس در حالتِ عادی هیچ فضایی نمی‌گیرد. رنگ قرمز فقط برای
+   «قطع است» است — وقتی دارد بررسی می‌کند (`is-checking`) خنثی می‌شود تا
+   چشم کاربر الکی نگران نشود. */
+
+.auth-connection {
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    margin: 0 0 1rem;
+    padding: .75rem .85rem;
+    border: 1px solid rgba(220, 53, 69, .35);
+    border-radius: 12px;
+    background: rgba(220, 53, 69, .06);
+    color: #b02a37;
+}
+
+.auth-connection[hidden] {
+    display: none;
+}
+
+.auth-connection-icon {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: rgba(220, 53, 69, .12);
+}
+
+.auth-connection-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.auth-connection-text strong {
+    display: block;
+    font-size: .84rem;
+}
+
+.auth-connection-text small {
+    display: block;
+    margin-top: .15rem;
+    color: var(--panel-muted);
+    font-size: .74rem;
+    line-height: 1.7;
+}
+
+.auth-connection-retry {
+    flex: 0 0 auto;
+    height: 38px;
+    padding: 0 .9rem;
+    border-radius: 10px;
+    font-size: .8rem;
+    font-weight: 700;
+}
+
+.auth-connection.is-checking {
+    border-color: var(--panel-line);
+    background: #f6f8f7;
+    color: var(--panel-ink);
+}
+
+/* «در حال بررسی» یک حالتِ خنثی است، نه موفقیت؛ پس سرمه‌ایِ Bootstrap هم به
+   سبزِ برند تبدیل نمی‌شود و به خاکستریِ سردِ اپ می‌رود. */
+.auth-connection.is-checking .auth-connection-icon {
+    background: rgba(34, 48, 58, .12);
+    color: #22303a;
+}
+
+@media (max-width: 420px) {
+    .auth-connection {
+        flex-wrap: wrap;
+    }
+
+    .auth-connection-retry {
+        width: 100%;
+    }
+}
+
 /* --------------------------------------------- تقویم فعالیت سالانه */
 
 .panel-cal-head {
@@ -1288,7 +1589,7 @@ body.panel-page .toasts-stack {
     height: 84px;
     border: 1px solid var(--panel-line);
     border-radius: 18px;
-    background: #eef1f7;
+    background: var(--panel-line);
     object-fit: cover;
 }
 
@@ -1337,7 +1638,7 @@ body.panel-page .toasts-stack {
 }
 
 .panel-cal-month-links a {
-    color: #0d6efd;
+    color: var(--panel-link);
     text-decoration: none;
 }
 

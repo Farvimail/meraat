@@ -135,11 +135,20 @@ use Illuminate\Support\Facades\Auth;
                                         </ul>
                                     </div>
                                 </div>
+                                {{-- کارمندِ بی‌ثبت هم باید «دیده» شود: اولین ورودِ روز با
+                                     گوشی ثبت می‌شود و کارتِ بی‌نگهبان تا رفرشِ دستی
+                                     آن را نمی‌بیند. عددی برای خواندن ندارد، پس فقط
+                                     ثبتش می‌کنیم. --}}
                                 @if ( !empty(TimerController::check($item->customer_id)) )
                                     <!-- <script src="{{ asset('js/timer.js') }}" rel="preload" as="script" ></script> -->
                                     <script type="text/javascript">
                                         var dt{{$item->customer_id}};
                                         runTimer({{$item->customer_id}}, @json($item->name));
+                                    </script>
+                                @else
+
+                                    <script type="text/javascript">
+                                        watchTimer({{$item->customer_id}}, @json($item->name));
                                     </script>
                                 @endif
                             @endforeach
