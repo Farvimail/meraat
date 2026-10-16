@@ -32,3 +32,4 @@ composer.phar
 # database dumps hold live personal data (users, national codes, salaries)
 inbox.sql
 *.sql.gz
+.compose.v1.yml

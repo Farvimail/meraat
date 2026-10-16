@@ -14,8 +14,6 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-COMPOSE=(docker compose -f docker-compose.prod.yml)
-
 log()  { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 warn() { printf '\033[33mهشدار: %s\033[0m\n' "$*"; }
 die()  { printf '\033[31mخطا: %s\033[0m\n' "$*" >&2; exit 1; }
@@ -34,19 +32,80 @@ log "بررسی پیش‌نیازها"
 
 command -v docker >/dev/null 2>&1 || die "docker نصب نیست یا در PATH نیست"
 docker info >/dev/null 2>&1 || die "دیمن داکر در دسترس نیست (systemctl status docker)"
-docker compose version >/dev/null 2>&1 || die "پلاگین docker compose نصب نیست"
 
-# فیلد name در docker-compose.prod.yml به compose 2.3.3+ نیاز دارد.
-compose_version=$(docker compose version --short 2>/dev/null | tr -d 'v\r' || true)
-case "$compose_version" in
-    2.0.*|2.1.*|2.2.*) die "نسخه compose شما $compose_version است؛ حداقل 2.3.3 لازم است" ;;
-esac
+# انتخاب ابزار compose: پلاگین v2 اگر باشد، وگرنه docker-compose v1.
+#
+# چرا این شاخه لازم شد: بعضی سرورها (از جمله همین سرور) فقط
+# `docker-compose` نسخهٔ ۱.۲۹ دارند و `docker compose` را نمی‌شناسند. آن نسخه
+# فیلد `name:` بالای فایل را نمی‌فهمد و با خطا رد می‌کند، پس برایش یک رونوشت
+# بدون آن خط ساخته می‌شود و نام پروژه با `-p` داده می‌شود — همان نتیجه، بدون
+# دست‌زدن به فایل اصلی.
+# پلاگین `docker compose` (v2) گاهی فقط برای یک کاربرِ خاص نصب است. روی همین
+# سرورِ meraat، کاربر root فقط `docker-compose` نسخهٔ ۱ را دارد و آن نسخه روی
+# ایمیج‌هایی که موتورِ جدیدِ داکر ساخته باشد با `KeyError: 'ContainerConfig'`
+# می‌میرد. پس اگر پلاگین در PATH نبود، binary مستقلِ compose v2 را در
+# مسیرهای شناخته‌شدهٔ پلاگین (از جمله خانهٔ کاربریِ همان کسی که پلاگین را
+# نصب کرده) جست‌وجو می‌کنیم؛ همان binary هم دقیقاً همان کار را می‌کند.
+# هر مسیر جدا و فقط اگر واقعاً وجود داشت جست‌وجو می‌شود. `find` روی مسیرِ
+# ناموجود کدِ خطا برمی‌گرداند و چون زیرِ `set -euo pipefail` هستیم، همین یک
+# مسیرِ نبوده کل استقرار را **بی‌هیچ پیامی** بعد از «بررسی پیش‌نیازها» می‌بست
+# (روی همین سرور فقط `/usr/libexec/docker/cli-plugins` وجود دارد).
+COMPOSE_V2_BIN=""
+for plugin_dir in \
+    /usr/local/lib/docker/cli-plugins \
+    /usr/libexec/docker/cli-plugins \
+    /usr/local/share/docker/cli-plugins \
+    "$HOME/.docker/cli-plugins" \
+    /home/*/.docker/cli-plugins
+do
+    [ -d "$plugin_dir" ] || continue
+
+    found=$(find "$plugin_dir" -maxdepth 1 -type f -name 'docker-compose*' 2>/dev/null | head -n 1 || true)
+
+    if [ -n "$found" ]; then
+        COMPOSE_V2_BIN="$found"
+        break
+    fi
+done
+
+if docker compose version >/dev/null 2>&1; then
+    COMPOSE=(docker compose -f docker-compose.prod.yml)
+    compose_version=$(docker compose version --short 2>/dev/null | tr -d 'v\r' || true)
+
+    # فیلد name در docker-compose.prod.yml به compose 2.3.3+ نیاز دارد.
+    case "$compose_version" in
+        2.0.*|2.1.*|2.2.*) die "نسخه compose شما $compose_version است؛ حداقل 2.3.3 لازم است" ;;
+    esac
+elif [ -n "$COMPOSE_V2_BIN" ]; then
+    warn "پلاگین docker compose در PATH کاربر فعلی نیست؛ از binary مستقل استفاده می‌شود: $COMPOSE_V2_BIN"
+    COMPOSE=("$COMPOSE_V2_BIN" -f docker-compose.prod.yml)
+    compose_version=$("$COMPOSE_V2_BIN" version --short 2>/dev/null | tr -d 'v\r' || true)
+
+    case "$compose_version" in
+        2.0.*|2.1.*|2.2.*) die "نسخه compose شما $compose_version است؛ حداقل 2.3.3 لازم است" ;;
+    esac
+elif command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE_FILE_V1=.compose.v1.yml
+    grep -v '^name:' docker-compose.prod.yml > "$COMPOSE_FILE_V1"
+    COMPOSE=(docker-compose -p meraat-prod -f "$COMPOSE_FILE_V1")
+    compose_version=$(docker-compose version --short 2>/dev/null | tr -d 'v\r' || true)
+    warn "پلاگین docker compose نیست؛ با docker-compose $compose_version ادامه می‌دهیم."
+else
+    die "نه پلاگین docker compose نصب است و نه دستور docker-compose"
+fi
 
 grep -qE '^APP_KEY=base64:.+' .env \
     || die "APP_KEY در .env خالی یا نامعتبر است. همان APP_KEY سایت فعلی سرور را بگذار (key:generate نزن)."
 
 grep -qE '^DB_PASSWORD=.+'      .env || die "DB_PASSWORD در .env خالی است."
 grep -qE '^DB_ROOT_PASSWORD=.+' .env || die "DB_ROOT_PASSWORD در .env خالی است."
+
+# تازه‌سازیِ زنده (هابِ WebSocket) خاموشیِ بی‌خطری دارد، پس خالی بودنِ کلید فقط
+# هشدار است و نه توقف: سرویس بالا می‌آید ولی هر خبرِ ثبت را با ۴۰۳ رد می‌کند و
+# پنل به همان درخواست‌های دوره‌ای برمی‌گردد. یک هشدار اینجا کافی است تا کسی
+# فکر نکند «استقرار موفق شد ولی چرا هنوز ۱۰ ثانیه تأخیر دارم؟»
+grep -qE '^HUB_SECRET=.+' .env \
+    || warn "HUB_SECRET در .env خالی است: تازه‌سازیِ زندهٔ پنل خاموش می‌ماند (پنل با درخواست‌های دوره‌ای کار می‌کند). راهِ روشن‌کردن: ws/README.md"
 
 WEB_BIND=$(env_get WEB_BIND)
 WEB_BIND=${WEB_BIND:-127.0.0.1}
@@ -57,7 +116,7 @@ printf '   compose %s | انتشار روی %s:%s\n' "${compose_version:-?}" "$W
 
 # ------------------------------------------------------- بکاپ پیش از استقرار
 
-if [ -n "$("${COMPOSE[@]}" ps --status running -q app 2>/dev/null || true)" ]; then
+if [ -n "$("${COMPOSE[@]}" ps -q app 2>/dev/null || true)" ]; then
     log "بکاپ دیتابیس پیش از استقرار"
     if ! "${COMPOSE[@]}" exec -T app php artisan db:backup; then
         warn "بکاپ پیش از استقرار انجام نشد (دیتابیس احتمالا هنوز بالا نیست)."
@@ -108,6 +167,8 @@ fi
 
 log "وضعیت نهایی"
 "${COMPOSE[@]}" ps
+
+[ "${COMPOSE_FILE_V1:-}" = "" ] || rm -f "$COMPOSE_FILE_V1"
 
 cat <<EOF
 

@@ -43,6 +43,10 @@
     <script src="{{ asset('js/app.js') }}?v={{ filemtime(public_path('js/app.js')) }}"></script>
     <script src="{{ asset('js/ajax.js') }}?v={{ filemtime(public_path('js/ajax.js')) }}"></script>
     <script src="{{ asset('js/timer.js') }}?v={{ filemtime(public_path('js/timer.js')) }}"></script>
+
+    {{-- فقط صفحه‌های ورود فرم دارند؛ اگر #login-form نباشد این فایل کاری
+         نمی‌کند. --}}
+    <script src="{{ asset('js/auth-connection.js') }}?v={{ filemtime(public_path('js/auth-connection.js')) }}"></script>
 </head>
 <body class="panel-page auth-page">
 
