@@ -1,10 +1,11 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FadeInView } from '../components/motion';
+import { PhotoEditorSheet } from '../components/photo-editor';
 import {
   Avatar,
   Banner,
@@ -21,7 +22,7 @@ import {
 } from '../components/ui';
 import { avatarSources } from '../lib/avatar';
 import { pickProfilePhoto } from '../lib/photo-picker';
-import type { PhotoSource } from '../lib/profile-photo';
+import type { PhotoSource, PickedPhoto } from '../lib/profile-photo';
 import {
   formatClock,
   formatDmyFull,
@@ -30,8 +31,10 @@ import {
 } from '../lib/jalali';
 import { PUNCH_LABEL, workedSeconds } from '../lib/punch';
 import { buzzAdvice, buzzTest } from '../lib/feedback';
+import { PresenceScanSheet } from '../components/presence-scan';
+import { needsQrScan, presenceNote } from '../lib/presence';
 import { useSession } from '../session';
-import { colors, spacing } from '../theme';
+import { colors, radius, spacing } from '../theme';
 import HistoryScreen from './HistoryScreen';
 
 export default function DashboardScreen() {
@@ -39,13 +42,18 @@ export default function DashboardScreen() {
     employee,
     today,
     error,
+    clearError,
     busy,
     punch,
     refresh,
     signOut,
     liveClock,
     photoBusy,
+    presence,
+    presenceBusy,
+    confirmPresence,
     setPhoto,
+    photoProgress,
     removePhoto,
   } = useSession();
   const [showHistory, setShowHistory] = useState(false);
@@ -53,7 +61,21 @@ export default function DashboardScreen() {
   const [profileOpen, setProfileOpen] = useState(false);
   /** پیامِ وضعیتِ کارتِ پروفایل (موفق/ناموفق) — جدا از پیامِ خطای بالای صفحه. */
   const [photoNote, setPhotoNote] = useState<string | null>(null);
+  /** عکسِ در حالِ ویرایش (چرخش/قاب مربع)؛ `null` یعنی ویرایشگر بسته است. */
+  const [editing, setEditing] = useState<PickedPhoto | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  /** شیتِ اسکنِ QR تأییدِ حضور و پیامِ نتیجهٔ همین شیت. */
+  const [scanOpen, setScanOpen] = useState(false);
+  const [scanNote, setScanNote] = useState<string | null>(null);
+  /**
+   * آینهٔ آخرین خطا برای استفادهٔ داخلِ callback.
+   *
+   * چرا ref و نه خودِ `error`: در بدنهٔ onCode ورودی از رندر قبل بسته شده
+   * است، پس همان مقدارِ کهنه برمی‌گردد. این آینه دقیقاً همان چیزی را می‌دهد
+   * که `confirmPresence` همین لحظه ست کرده است.
+   */
+  const errorRef = useRef<string | null>(null);
+  errorRef.current = error;
   const [ready, setReady] = useState(false);
   // نتیجهٔ «آزمایش لرزش»؛ `null` یعنی هنوز آزمایشی انجام نشده بوده است.
   const [buzz, setBuzz] = useState<string | null>(null);
@@ -110,6 +132,21 @@ export default function DashboardScreen() {
    * بستنِ پیکر با «لغو» خطا نیست: هیچ پیامی نمی‌دهیم. اجازهٔ داده‌نشده و
    * شکست هم پیامِ روشن می‌گیرند تا کاربر بداند ماجرا در گوشی است یا سرور.
    */
+  /**
+   * باز کردنِ کارتِ پروفایل با وضعیتِ تمیز.
+   *
+   * چرا خطای بالای صفحه هم پاک می‌شود: کارتِ عکس پیش‌تر به آن خطا برمی‌گشت
+   * (`photoNote ?? error`) و اگر آخرین خطا مربوط به ثبتِ حضور بود، زیرِ عکس
+   * پیامِ «اینترنت/شبکهٔ محل کار» می‌نشست — پیامی که هیچ ربطی به عکس نداشت و
+   * کاربر را دنبالِ مشکلِ اشتباهی می‌فرستاد. حالا هر کارت فقط حرفِ خودش را
+   * می‌زند؛ خطای صفحه جای خودش (بنرِ بالای بدنه) می‌ماند.
+   */
+  const openProfile = () => {
+    setPhotoNote(null);
+    clearError();
+    setProfileOpen(true);
+  };
+
   const pickPhoto = async (source: PhotoSource) => {
     setPhotoNote(null);
 
@@ -133,7 +170,32 @@ export default function DashboardScreen() {
       return;
     }
 
-    setPhotoNote((await setPhoto(outcome.photo)) ? 'عکس پروفایل ذخیره شد.' : null);
+    /*
+     * اینجا آپلودی انجام نمی‌شود — عکس اول به ویرایشگر می‌رود تا کارمند
+     * زاویه و قابش را تنظیم کند، و فرستادن بعد از «استفاده از عکس» همان
+     * مسیرِ قبلیِ `setPhoto` را می‌رود.
+     *
+     * استثناء: اگر گالری‌ای اندازهٔ تصویر نداد (کمیاب، ولی شده)، ویرایشگر
+     * بدون آن عدد نمی‌تواند هندسهٔ برش را حساب کند — پس همان رفتارِ قدیمیِ
+     * نسخهٔ وب: عکس همان‌طور که هست می‌رود و سرور و پنل خودشان با آن
+     * کار می‌کنند.
+     */
+    if (!outcome.photo.width || !outcome.photo.height) {
+      setPhotoNote((await setPhoto(outcome.photo)) ? 'عکس پروفایل ذخیره شد.' : null);
+      return;
+    }
+
+    setEditing(outcome.photo);
+  };
+
+  /**
+   * پایانِ ویرایش: عکسِ چرخیده و بریده‌شده همان مسیرِ آپلودِ قبلی را می‌رود؛
+   * سرور هیچ تفاوتی در درخواست نمی‌بیند (نام و نوع از خودِ نتیجه ساخته
+   * می‌شود) و پیامِ «ذخیره شد» هم روی همان کارتِ پروفایل می‌نشیند.
+   */
+  const finishEditing = async (photo: PickedPhoto) => {
+    setEditing(null);
+    setPhotoNote((await setPhoto(photo)) ? 'عکس پروفایل ذخیره شد.' : null);
   };
 
   const dropPhoto = async () => {
@@ -184,8 +246,7 @@ export default function DashboardScreen() {
             icon: 'account-circle-outline',
             onPress: () => {
               setMenuOpen(false);
-              setPhotoNote(null);
-              setProfileOpen(true);
+              openProfile();
             },
           },
           {
@@ -230,7 +291,8 @@ export default function DashboardScreen() {
         uris={avatarSources(employee?.avatar)}
         hasPhoto={Boolean(employee?.avatar)}
         busy={photoBusy}
-        note={photoNote ?? error}
+        progress={photoProgress}
+        note={photoNote}
         onPick={(source) => void pickPhoto(source)}
         onRemove={() => void dropPhoto()}
         onClose={() => setProfileOpen(false)}
@@ -262,10 +324,7 @@ export default function DashboardScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="پروفایل و عکس"
-              onPress={() => {
-                setPhotoNote(null);
-                setProfileOpen(true);
-              }}
+              onPress={openProfile}
               style={styles.avatarButton}
             >
               {/* اگر کارمند عکس پروفایل نداشته باشد، عکسِ پیش‌فرضِ خودِ سرور
@@ -308,7 +367,75 @@ export default function DashboardScreen() {
             </View>
           </Card>
         </FadeInView>
+        {/* تأییدِ حضور با QR.
+
+             چرا کارتِ جدا زیرِ پروفایل: تأیید، کارِ **بعد** از ثبت است و
+             باید جایی باشد که کاربر بعد از زدنِ دکمهٔ ثبت چشمش به آن بیفتد.
+             اگر سرور کلیدِ QR را نداشته باشد این کارت کامل دیده نمی‌شود و اپ
+             مثل قبل کار می‌کند. */}
+        {presence.enabled ? (
+          <FadeInView delay={120}>
+            <Card style={styles.presenceCard}>
+              <View style={styles.presenceHead}>
+                <Text style={styles.cardTitle}>تأیید حضور</Text>
+
+                {presence.confirmed ? (
+                  <View style={styles.presenceBadge}>
+                    <MaterialCommunityIcons name="check-circle-outline" size={14} color={colors.brand} />
+                    <Text style={styles.presenceBadgeLabel}>تأیید شده</Text>
+                  </View>
+                ) : null}
+              </View>
+
+              <Text style={styles.presenceNote}>{presenceNote(presence)}</Text>
+
+              {needsQrScan(presence) ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="اسکن QR کارت من"
+                  onPress={() => {
+                    setScanNote(null);
+                    setScanOpen(true);
+                  }}
+                  style={({ pressed }) => [styles.presenceButton, pressed && styles.pressedSoft]}
+                >
+                  <MaterialCommunityIcons name="qrcode-scan" size={18} color={colors.white} />
+                  <Text style={styles.presenceButtonLabel}>اسکن QR کارتِ من</Text>
+                </Pressable>
+              ) : null}
+            </Card>
+          </FadeInView>
+        ) : null}
       </ScrollView>
+
+      <PresenceScanSheet
+        visible={scanOpen}
+        busy={presenceBusy}
+        employeeId={employee?.id ?? null}
+        note={scanNote}
+        onCode={async (code) => {
+          const ok = await confirmPresence(code);
+
+          if (ok) {
+            setScanNote(null);
+            setScanOpen(false);
+            return true;
+          }
+
+          setScanNote(errorRef.current ?? 'تأیید نشد؛ دوباره تلاش کنید.');
+          return false;
+        }}
+        onClose={() => setScanOpen(false)}
+      />
+
+      {/* ویرایشگرِ عکس: بعد از انتخاب از گالری/دوربین باز می‌شود (بیرون از
+          کارتِ پروفایل، چون مودالِ تمام‌صفحهٔ خودش را می‌خواهد) و بعد از
+          تأیید، نتیجه همان `setPhoto`ِ قبلی را می‌رود. */}
+      <PhotoEditorSheet
+        photo={editing}
+        onCancel={() => setEditing(null)}
+        onConfirm={(photo) => void finishEditing(photo)}
+      />
 
       {/* ---------------- نوار ثابتِ پایین ----------------
            دکمهٔ ثبت بیرون از ناحیهٔ اسکرول است تا همیشه در دسترس باشد؛ کارِ
@@ -365,6 +492,50 @@ const styles = StyleSheet.create({
   },
   avatarButton: {
     borderRadius: 48,
+  },
+  presenceCard: {
+    gap: spacing.sm,
+  },
+  presenceHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  presenceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 3,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brandSoft,
+  },
+  presenceBadgeLabel: {
+    color: colors.brand,
+    fontSize: 12,
+  },
+  presenceNote: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 21,
+  },
+  presenceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: radius.md,
+    backgroundColor: colors.brand,
+  },
+  presenceButtonLabel: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  /** فشردنِ نرمِ دکمهٔ تأیید — همان حسِ بقیهٔ دکمه‌های این صفحه. */
+  pressedSoft: {
+    opacity: 0.88,
   },
   avatarBadge: {
     position: 'absolute',

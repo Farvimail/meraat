@@ -1,18 +1,22 @@
 import * as SecureStore from 'expo-secure-store';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { AppState } from 'react-native';
 
 import { ApiError, createApiClient } from './lib/api';
 import type { ApiClient } from './lib/api';
 import { getBiometricStatus, verifyBiometric } from './lib/biometrics';
 import type { BiometricStatus } from './lib/biometrics';
-import { API_BASE_URL, DEVICE_NAME, REQUEST_TIMEOUT_MS, STORAGE_KEYS } from './lib/config';
+import { API_BASE_URL, API_ORIGIN, REQUEST_TIMEOUT_MS, STORAGE_KEYS } from './lib/config';
 import { reachableFromError } from './lib/connection';
 import type { ConnectionState } from './lib/connection';
 import { getDeviceIdentity } from './lib/device';
+import { NO_PRESENCE, presenceOf } from './lib/presence';
+import type { PresenceState } from './lib/presence';
 import { notifyPunchRecorded, punchFailureHaptic, punchPressHaptic } from './lib/feedback';
 import { BIOMETRIC_MESSAGES, messageForError } from './lib/messages';
 import { parseClock } from './lib/jalali';
+import { hubSocketUrl, watchTimer } from './lib/realtime';
 import {
   checkPhoto,
   photoFileName,
@@ -58,13 +62,28 @@ interface SessionValue {
   /** در حال فرستادن یا حذفِ عکس پروفایل؛ تا تمام شدن، دکمه‌ها باید قفل باشند. */
   photoBusy: boolean;
   /**
+   * پیشرفتِ آپلودِ عکس، صفر تا یک — عدد فقط حینِ آپلود است و بقیهٔ
+   * وقت‌ها `null` (حذفِ عکس پیشرفت ندارد). کارتِ پروفایل همین را به
+   * نوارِ درصد تبدیل می‌کند تا کاربر ببیند عکس دارد می‌رود یا گیر کرده.
+   */
+  photoProgress: number | null;
+  /**
    * فرستادنِ عکس انتخاب‌شده. `false` یعنی نشد و پیامِ خطا در `error` نشسته
    * است. عکس بعد از پذیرشِ سرور، هم در اپ عوض می‌شود و هم در پنل وب — چون
    * سرور همان جدولی را به‌روز می‌کند که پنل می‌خواند.
    */
-  setPhoto(photo: PickedPhoto): Promise<boolean>;
+  setPhoto(photo: PickedPhoto, onProgress?: (fraction: number) => void): Promise<boolean>;
   /** حذفِ عکس؛ بعدش اپ و پنل هر دو عکسِ پیش‌فرض را نشان می‌دهند. */
   removePhoto(): Promise<boolean>;
+  /** وضعیتِ تأییدِ حضورِ امروز با QR — مرجع آن سرور است. */
+  presence: PresenceState;
+  /** در حال فرستادنِ کدِ اسکن‌شده به سرور. */
+  presenceBusy: boolean;
+  /**
+   * تأییدِ حضور با کدِ خوانده‌شده از کارتِ کارمند در پنل. `false` یعنی نشد و
+   * `error` پیام را دارد.
+   */
+  confirmPresence(code: string): Promise<boolean>;
   /** یک تستِ سبکِ اتصال؛ `true` یعنی سرور جواب داد (حتی با ۴۰۱). */
   checkConnection(): Promise<boolean>;
   clearError(): void;
@@ -114,9 +133,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoProgress, setPhotoProgress] = useState<number | null>(null);
   const [liveClock, setLiveClock] = useState('');
   const [biometric, setBiometric] = useState<BiometricStatus | null>(null);
   const [connection, setConnection] = useState<ConnectionState>('checking');
+  const [presence, setPresence] = useState<PresenceState>(NO_PRESENCE);
+  const [presenceBusy, setPresenceBusy] = useState(false);
 
   const tokenRef = useRef<string | null>(null);
 
@@ -171,6 +193,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setRows(payload.punches);
     setDmy(payload.dmy);
     setServerClock(payload.server_time.clock);
+    // وضعیتِ تأییدِ حضور با هر پاسخِ تازه (ورود/ثبت/تازه‌سازی) از سرور خوانده
+    // می‌شود؛ اپ از خودش حدس نمی‌زند که تأیید شده یا نه.
+    setPresence(presenceOf(payload.qr));
     anchorRef.current = {
       at: Date.now(),
       clockSeconds: secondsOfDay(payload.server_time.clock),
@@ -271,7 +296,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           email: email.trim(),
           password,
           device_id: device.deviceId,
-          device_name: DEVICE_NAME,
+          // مدلِ واقعیِ گوشی (مثل `Pixel 8`) و اگر دستگاه گزارش نداد، همان
+          // نامِ پیش‌فرض؛ سرور آن را در `tbl_mobile_device.device_name` می‌ریزد
+          // تا مدیر بداند کدام کارمند روی کدام گوشی نشسته است.
+          device_name: device.label,
           platform: device.platform,
         });
 
@@ -330,8 +358,58 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, [client, status, applyToday, noteFailure]);
 
+  const employeeId = employee ? employee.id : null;
+
+  /**
+   * تایمرِ زنده — «شروع/توقف از داخلِ سایت، همان لحظه روی گوشی».
+   *
+   * تا پیش از این، اپ فقط با ورود، ضربهٔ خودِ کاربر و کشیدنِ دستیِ صفحه تازه
+   * می‌شد؛ اگر مدیر از پنل شروع یا توقف می‌زد، روی گوشی تا تازه‌سازیِ بعدی
+   * خبری نمی‌شد. اینجا همان کاری می‌شود که پنلِ وب می‌کند: سوکتِ هاب
+   * (لحظه‌ای)، و اگر سوکت وصل نشد پرسشِ سبکِ «انگشتِ تغییر» و خواندنِ کاملِ
+   * `today` فقط وقتی واقعاً چیزی عوض شده است.
+   *
+   * جای این افکند در نشست است و نه در صفحهٔ داشبورد: حالا که کاربر در صفحهٔ
+   * سابقه یا کارتِ پروفایل است هم وضعیت زنده می‌ماند و به‌محضِ برگشتن، عدد
+   * درست همان‌جا نشسته است.
+   */
+  useEffect(() => {
+    if (status !== 'signedIn' || employeeId === null) {
+      return;
+    }
+
+    return watchTimer({
+      url: hubSocketUrl(API_ORIGIN, employeeId, dmy),
+      customerId: employeeId,
+      onChange: () => {
+        void refresh();
+      },
+      readRevision: async () => (await client.revision()).revision,
+    });
+  }, [status, employeeId, dmy, client, refresh]);
+
+  /**
+   * برگشتن به اپ = تازه‌سازیِ فوری.
+   *
+   * گوشی در پس‌زمینه سوکت را می‌خواباند و تایمرها را کند می‌کند؛ اگر کاربر
+   * قفل گوشی را باز کند باید عددِ همین لحظه را ببیند، نه عددِ چند دقیقه پیش.
+   */
+  useEffect(() => {
+    if (status !== 'signedIn') {
+      return;
+    }
+
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next === 'active') {
+        void refresh();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [status, refresh]);
+
   const setPhoto = useCallback(
-    async (photo: PickedPhoto) => {
+    async (photo: PickedPhoto, onProgress?: (fraction: number) => void) => {
       // همان قواعدی که سرور دارد، اول روی گوشی بررسی می‌شود: پیامِ فوری و
       // بدونِ آپلودِ فایلی که آخرش رد می‌شود.
       const rejection = checkPhoto(photo);
@@ -343,13 +421,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
       setPhotoBusy(true);
       setError(null);
+      setPhotoProgress(0);
 
       try {
-        const response = await client.uploadPhoto({
-          uri: photo.uri,
-          name: photoFileName(photo),
-          type: photoMimeType(photo),
-        });
+        const response = await client.uploadPhoto(
+          {
+            uri: photo.uri,
+            name: photoFileName(photo),
+            type: photoMimeType(photo),
+          },
+          (fraction) => {
+            setPhotoProgress(fraction);
+            onProgress?.(fraction);
+          },
+        );
 
         // کارمندِ برگشتی از سرور مرجع است؛ اپ از خودش حدس نمی‌زند.
         setEmployee(response.employee);
@@ -361,6 +446,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         return false;
       } finally {
         setPhotoBusy(false);
+        setPhotoProgress(null);
       }
     },
     [client, noteFailure],
@@ -384,6 +470,29 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setPhotoBusy(false);
     }
   }, [client, noteFailure]);
+
+  const confirmPresence = useCallback(
+    async (code: string) => {
+      setPresenceBusy(true);
+      setError(null);
+
+      try {
+        const response = await client.confirmPresence(code);
+
+        setPresence(presenceOf(response.qr));
+        setEmployee(response.employee);
+        setConnection('online');
+        return true;
+      } catch (failure) {
+        noteFailure(failure);
+        setError(messageForError(failure));
+        return false;
+      } finally {
+        setPresenceBusy(false);
+      }
+    },
+    [client, noteFailure],
+  );
 
   const today = useMemo<TodayState>(
     () => deriveToday(rows, { dmy, now: currentClock() || null }),
@@ -461,12 +570,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       error,
       busy,
       photoBusy,
+      photoProgress,
+      presence,
+      presenceBusy,
       signIn,
       signOut,
       refresh,
       punch,
       setPhoto,
       removePhoto,
+      confirmPresence,
       checkConnection,
       clearError: () => setError(null),
     }),
@@ -482,12 +595,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       error,
       busy,
       photoBusy,
+      photoProgress,
+      presence,
+      presenceBusy,
       signIn,
       signOut,
       refresh,
       punch,
       setPhoto,
       removePhoto,
+      confirmPresence,
       checkConnection,
     ],
   );

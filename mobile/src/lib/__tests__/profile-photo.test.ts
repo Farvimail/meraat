@@ -13,12 +13,19 @@ import {
   pickerOptions,
 } from '../profile-photo.ts';
 
-test('پیکر با قابِ مربع و برشِ روشن باز می‌شود', () => {
+test('پیکر خام می‌آورد؛ برش و چرخش کارِ ویرایشگرِ خودِ اپ است', () => {
   const options = pickerOptions('library');
 
+  // قابِ مربع قراردادِ نهایی است (ویرایشگر همین را اجرا می‌کند)، نه کارِ
+  // پیکر — پس `aspect` می‌ماند ولی `allowsEditing` خاموش است تا عکسِ خام
+  // به ویرایشگر برسد و کاربر دو برشِ پشتِ سرِ هم ندهد.
   assert.deepEqual(options.aspect, PHOTO_ASPECT, 'قاب باید مربع باشد');
   assert.deepEqual(PHOTO_ASPECT, [1, 1]);
-  assert.equal(options.allowsEditing, true, 'گامِ برش باید روشن باشد');
+  assert.equal(
+    options.allowsEditing,
+    false,
+    'برشِ سیستم‌عامل باید خاموش باشد تا چرخشِ ویرایشگر معنا داشته باشد',
+  );
   assert.equal(options.mediaTypes, 'images', 'فقط عکس، نه ویدیو');
   assert.equal(options.quality, PHOTO_QUALITY);
   assert.equal(options.exif, false, 'مکانِ عکس‌برداری نباید فرستاده شود');

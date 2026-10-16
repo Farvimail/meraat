@@ -44,6 +44,13 @@
         }
       ],
       [
+        "expo-camera",
+        {
+          "cameraPermission": "برای خواندن QR تأیید حضور روی پنل، دسترسی به دوربین لازم است. تصویری ذخیره نمی‌شود.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
         "expo-secure-store",
         {
           "faceIDPermission": "برای نگه‌داشتن امن نشست، به دسترسی Secure Enclave نیاز است."

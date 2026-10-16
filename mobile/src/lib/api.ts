@@ -1,6 +1,7 @@
 /* پسوندِ `.ts` عمدی است: همین فایل با `node --test` هم اجرا می‌شود و آن‌جا
    نشانیِ بی‌پسوند حل نمی‌شود (مترو هر دو را می‌خواند). */
 import { isWebPhotoUri } from './profile-photo.ts';
+import type { PresenceState } from './presence';
 import type {
   DeviceInfo,
   Employee,
@@ -8,6 +9,7 @@ import type {
   LoginResponse,
   PunchResponse,
   ServerTime,
+  TimerRevision,
   TodayPayload,
 } from './types';
 
@@ -31,6 +33,12 @@ export type ApiErrorCode =
   | 'gps_required'
   | 'photo_rejected'
   | 'photo_too_large'
+  | 'qr_invalid'
+  | 'qr_expired'
+  | 'qr_foreign'
+  | 'qr_required'
+  | 'qr_disabled'
+  | 'qr_confirm_failed'
   | 'server'
   | 'bad_response';
 
@@ -64,6 +72,12 @@ const CODE_BY_SERVER_ERROR: Record<string, ApiErrorCode> = {
   photo_save_failed: 'photo_rejected',
   photo_delete_failed: 'photo_rejected',
   photo_too_large: 'photo_too_large',
+  qr_invalid: 'qr_invalid',
+  qr_expired: 'qr_expired',
+  qr_foreign: 'qr_foreign',
+  qr_required: 'qr_required',
+  qr_disabled: 'qr_disabled',
+  qr_confirm_failed: 'qr_confirm_failed',
   unauthenticated: 'unauthorized',
   unauthorized: 'unauthorized',
   token_expired: 'unauthorized',
@@ -80,6 +94,36 @@ function codeFromResponse(status: number, serverError: unknown): ApiErrorCode {
   if (status >= 500) return 'server';
 
   return 'bad_response';
+}
+
+/**
+ * خطای `ApiError` از پاسخِ ناموفق سرور.
+ *
+ * هر دو مسیر — `fetch` (درخواست‌های متنی) و `XHR` (آپلودِ عکس) — از همین
+ * یک جا استفاده می‌کنند تا کدِ خطا و پیامِ سرور در هر دو یکسان ترجمه
+ * شوند؛ وگرنه همان خطای سرور دو شکلِ متفاوت به کاربر می‌داد.
+ */
+function apiErrorFromResponse(status: number, raw: string): ApiError {
+  let parsed: unknown = null;
+
+  if (raw.length > 0) {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = null;
+    }
+  }
+
+  const record = (parsed ?? {}) as Record<string, unknown>;
+  const serverMessage = typeof record.message === 'string' ? record.message : null;
+
+  // پیامِ سرور اولویت دارد: برای عکس (نوع/حجم) دقیق‌تر از ترجمهٔ عمومی اپ است.
+  return new ApiError(
+    codeFromResponse(status, record.error),
+    serverMessage ?? `خطای سرور (${status})`,
+    status,
+    typeof record.error === 'string' ? record.error : raw.slice(0, 200),
+  );
 }
 
 export interface PunchRequestBody {
@@ -107,6 +151,8 @@ export interface ApiClientOptions {
   getToken?: () => string | null | undefined;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  /** مهلتِ آپلودِ عکس؛ پیش‌فرض ۲ دقیقه (بیشتر از `timeoutMs`، عمداً). */
+  uploadTimeoutMs?: number;
 }
 
 export interface MeResponse {
@@ -121,15 +167,36 @@ export interface ApiClient {
   logout(): Promise<void>;
   me(): Promise<MeResponse>;
   today(): Promise<TodayPayload>;
+  /**
+   * «انگشتِ تغییرِ» امروز — یک رشتهٔ کوتاه و ارزان.
+   *
+   * تایمرِ زندهٔ اپ همان‌جوری که پنل دارد (`/read/timer-revision`) به یک
+   * پرسشِ سبک نیاز دارد: اگر سوکتِ هاب وصل نشود، اپ با این می‌فهمد مدیر از
+   * داخل سایت شروع/توقف زده و فقط همان لحظه `today` را کامل می‌گیرد.
+   */
+  revision(): Promise<TimerRevision>;
   punch(body: PunchRequestBody): Promise<PunchResponse>;
   history(page?: number): Promise<HistoryResponse>;
   /**
    * فرستادنِ عکس پروفایل (مربع، برش‌خورده روی گوشی). سرور خودش عکس را در
    * همان جدولِ پنل ذخیره می‌کند و کارمندِ تازه‌شده را برمی‌گرداند.
+   *
+   * `onProgress` صعودِ صفر تا یک را حینِ آپلود گزارش می‌کند (ممکن است
+   * اصلاً صدا زده نشود اگر مرورگر/گوشی طولِ کل را نداند). آپلود مهلتِ
+   * خودش را دارد (`uploadTimeoutMs`، چند دقیقه)، نه مهلتِ کوتاهِ
+   * درخواست‌های متنی — عکس روی اینترنتِ ضعیف به‌سادگی از آن رد می‌شود.
    */
-  uploadPhoto(part: PhotoPart): Promise<PhotoResponse>;
+  uploadPhoto(part: PhotoPart, onProgress?: (fraction: number) => void): Promise<PhotoResponse>;
   /** حذفِ عکس؛ بعدش سرور `avatar: null` می‌دهد و اپ به عکسِ پیش‌فرض برمی‌گردد. */
   deletePhoto(): Promise<PhotoResponse>;
+  /**
+   * تأییدِ حضور با کدِ QR خوانده‌شده از کارتِ همان کارمند در پنل.
+   *
+   * کد از خودِ صفحهٔ پنل خوانده می‌شود و سرور آن را با پنجرهٔ زمانیِ جاری
+   * می‌سنجد؛ اپ هیچ چیزی از خودش نمی‌سازد و ساعتِ گوشی هم در این مسیر نقشی
+   * ندارد.
+   */
+  confirmPresence(code: string): Promise<QrConfirmResponse>;
 }
 
 /** یک فایلِ عکس برای `multipart/form-data`. */
@@ -144,14 +211,27 @@ export interface PhotoResponse {
   employee: Employee;
 }
 
+/** پاسخِ تأییدِ حضور با QR. */
+export interface QrConfirmResponse {
+  confirmed: boolean;
+  qr: PresenceState;
+  employee: Employee;
+}
+
 export function createApiClient(options: ApiClientOptions): ApiClient {
   const baseUrl = options.baseUrl.replace(/\/+$/, '');
   const doFetch = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? 15000;
+  const uploadTimeoutMs = options.uploadTimeoutMs ?? 120_000;
 
-  async function request<T>(path: string, init: RequestInit = {}, token?: string | null): Promise<T> {
+  async function request<T>(
+    path: string,
+    init: RequestInit = {},
+    token?: string | null,
+    timeoutOverrideMs?: number,
+  ): Promise<T> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => controller.abort(), timeoutOverrideMs ?? timeoutMs);
     const authToken = token ?? options.getToken?.();
 
     /*
@@ -200,17 +280,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     }
 
     if (!response.ok) {
-      const record = (body ?? {}) as Record<string, unknown>;
-      const code = codeFromResponse(response.status, record.error);
-      const serverMessage = typeof record.message === 'string' ? record.message : null;
-
-      // پیامِ سرور اولویت دارد: برای عکس (نوع/حجم) دقیق‌تر از ترجمهٔ عمومی اپ است.
-      throw new ApiError(
-        code,
-        serverMessage ?? `خطای سرور (${response.status})`,
-        response.status,
-        typeof record.error === 'string' ? record.error : raw.slice(0, 200),
-      );
+      throw apiErrorFromResponse(response.status, raw);
     }
 
     if (body === null) {
@@ -247,6 +317,103 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     return form;
   }
 
+  /**
+   * آپلودِ عکس با `XMLHttpRequest` تا درصدِ پیشرفت ممکن باشد.
+   *
+   * چرا `fetch` نه: نه در React Native و نه در مرورگر، `fetch` رویدادِ
+   * پیشرفتِ آپلود ندارد؛ کاربر فقط «در حال ذخیره…» می‌دید بی‌آنکه بفهمد
+   * عکس دارد می‌رود یا وسطِ راه گیر کرده. مهلت هم مالِ خودش است: چند
+   * صد کیلوبایت عکس روی اینترنتِ ضعیف به‌سادگی از مهلتِ ۱۵ ثانیهٔ
+   * درخواست‌های متنی رد می‌شد و آپلود وسطِ راه قطع می‌شد — یعنی همان
+   * «عکس اعمال نشده» بدونِ هیچ خطای قابل‌فهمی.
+   *
+   * بدونِ `XMLHttpRequest` (تست‌های `node --test`) همان مسیرِ `fetch`
+   * می‌رود؛ فقط پیشرفتِ زنده در آن محیط‌ها افتاده است.
+   */
+  async function uploadPhotoRequest(
+    part: PhotoPart,
+    onProgress?: (fraction: number) => void,
+  ): Promise<PhotoResponse> {
+    const form = await photoForm(part);
+
+    if (typeof XMLHttpRequest === 'undefined') {
+      return request<PhotoResponse>(
+        '/profile/photo',
+        { method: 'POST', body: form },
+        undefined,
+        uploadTimeoutMs,
+      );
+    }
+
+    return new Promise<PhotoResponse>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let settled = false;
+
+      const finish = (action: () => void) => {
+        if (settled) return;
+        settled = true;
+        if (timer !== undefined) clearTimeout(timer);
+        action();
+      };
+
+      xhr.open('POST', `${baseUrl}/profile/photo`);
+      xhr.setRequestHeader('Accept', 'application/json');
+
+      const token = options.getToken?.();
+
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+
+      if (onProgress && xhr.upload) {
+        xhr.upload.onprogress = (event: { lengthComputable?: boolean; loaded: number; total: number }) => {
+          if (event.lengthComputable && event.total > 0) {
+            onProgress(Math.min(1, event.loaded / event.total));
+          }
+        };
+      }
+
+      xhr.onload = () => {
+        const loadedRaw = typeof xhr.responseText === 'string' ? xhr.responseText : '';
+
+        finish(() => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              resolve(JSON.parse(loadedRaw) as PhotoResponse);
+            } catch {
+              reject(
+                new ApiError('bad_response', 'پاسخ سرور خوانا نبود.', xhr.status, loadedRaw.slice(0, 200)),
+              );
+            }
+            return;
+          }
+
+          reject(apiErrorFromResponse(xhr.status, loadedRaw));
+        });
+      };
+
+      xhr.onerror = () => finish(() => reject(new ApiError('network', 'به سرور وصل نشدیم.')));
+
+      /*
+       * تایمر دستی، نه خاصیتِ `xhr.timeout`: آن خاصیت در بعضی نسخه‌های
+       * اندرویدِ React Native کار نمی‌کند. `abort` فقط از همین تایمر
+       * زده می‌شود، پس هر abortی یعنی «مهلت تمام شد» نه لغوِ کاربر.
+       */
+      xhr.onabort = () => finish(() => reject(new ApiError('timeout', 'پاسخی از سرور نگرفتیم.')));
+
+      timer = setTimeout(() => {
+        try {
+          xhr.abort();
+        } catch {
+          finish(() => reject(new ApiError('timeout', 'پاسخی از سرور نگرفتیم.')));
+        }
+      }, uploadTimeoutMs);
+
+      xhr.send(form);
+    });
+  }
+
   return {
     baseUrl,
 
@@ -258,16 +425,20 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
 
     today: () => request<TodayPayload>('/today'),
 
+    revision: () => request<TimerRevision>('/revision'),
+
     punch: (body) => request<PunchResponse>('/punch', { method: 'POST', body: JSON.stringify(body) }),
 
     history: (page = 1) => request<HistoryResponse>(`/history?page=${page}`),
 
-    uploadPhoto: async (part) =>
-      request<PhotoResponse>('/profile/photo', {
-        method: 'POST',
-        body: await photoForm(part),
-      }),
+    uploadPhoto: (part, onProgress) => uploadPhotoRequest(part, onProgress),
 
     deletePhoto: () => request<PhotoResponse>('/profile/photo', { method: 'DELETE' }),
+
+    confirmPresence: (code) =>
+      request<QrConfirmResponse>('/qr/confirm', {
+        method: 'POST',
+        body: JSON.stringify({ code }),
+      }),
   };
 }

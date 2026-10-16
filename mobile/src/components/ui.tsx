@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GLOW_MAX } from '../lib/glow';
 import type { Point } from '../lib/glow';
+import { toPersianDigits } from '../lib/jalali';
 import type { PhotoSource } from '../lib/profile-photo';
 import { colors, motion, radius, shadow, spacing } from '../theme';
 import { DriftGlow, PulseHalo, useGlowPush } from './motion';
@@ -819,6 +820,7 @@ export function ProfileSheet({
   uris,
   hasPhoto,
   busy,
+  progress,
   note,
   onPick,
   onRemove,
@@ -833,6 +835,13 @@ export function ProfileSheet({
   hasPhoto: boolean;
   /** در حال آپلود یا حذف. */
   busy: boolean;
+  /**
+   * پیشرفتِ آپلود (صفر تا یک). عدد باشد یعنی دارد آپلود می‌شود و نوارِ
+   * درصد نشان می‌رود؛ `null` یعنی کارِ دیگری در جریان است (مثلاً حذف)
+   * و همان چرخندهٔ قبلی کافی است. کلیدِ اصلیِ این نوار همین تفکیک است:
+   * «ذخیره روی سرور» برای کاربرِ اینترنتِ ضعیف معنایش «شاید هیچ‌وقت» بود.
+   */
+  progress?: number | null;
   /** پیامِ وضعیت/خطای همین کارت — جدا از خطای بالای صفحهٔ اصلی. */
   note?: string | null;
   onPick: (source: PhotoSource) => void;
@@ -895,16 +904,34 @@ export function ProfileSheet({
           {role ? <Text style={styles.profileRole}>{role}</Text> : null}
 
           <Text style={styles.profileHint}>
-            عکس بعد از انتخاب در قابِ مربع برش داده می‌شود؛ همان قاب در پنل وب هم دیده
-            می‌شود.
+            عکس بعد از انتخاب در ویرایشگر باز می‌شود: زاویه و بزرگ‌نمایی را تنظیم کنید تا
+            داخلِ قابِ مربع بنشیند — همان قاب در پنل وب هم دیده می‌شود.
           </Text>
 
           {note ? <Text style={styles.profileNote}>{note}</Text> : null}
 
           {busy ? (
             <View style={styles.profileBusy}>
-              <ActivityIndicator color={colors.brand} />
-              <Text style={styles.profileHint}>در حال ذخیره روی سرور…</Text>
+              {typeof progress === 'number' ? (
+                <View style={styles.profileProgressWrap}>
+                  <View style={styles.profileProgressTrack}>
+                    <View
+                      style={[
+                        styles.profileProgressFill,
+                        { width: `${Math.min(100, Math.max(0, Math.round(progress * 100)))}%` },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.profileHint}>
+                    {`در حال آپلود عکس… ${toPersianDigits(Math.round(progress * 100))}٪`}
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <ActivityIndicator color={colors.brand} />
+                  <Text style={styles.profileHint}>در حال ذخیره روی سرور…</Text>
+                </>
+              )}
             </View>
           ) : (
             <View style={styles.profileActions}>
@@ -1494,6 +1521,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     paddingVertical: spacing.md,
+  },
+  profileProgressWrap: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  profileProgressTrack: {
+    alignSelf: 'stretch',
+    height: 6,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brandSoft,
+    overflow: 'hidden',
+  },
+  profileProgressFill: {
+    height: '100%',
+    borderRadius: radius.pill,
+    backgroundColor: colors.brand,
   },
   profileActions: {
     alignSelf: 'stretch',

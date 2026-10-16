@@ -121,6 +121,18 @@ const state = {
   photos: 0,
 };
 
+/**
+ * عکس‌های آپلودشدهٔ همین نشست: نامِ فایل → `{ bytes, mime }`.
+ *
+ * چرا لازم است و صرفِ شمارنده کافی نبود: سرور آزمایشی هر مسیر
+ * `/images/users/*` را با یک تصویرِ نمونهٔ **یکسان** جواب می‌داد. نتیجه
+ * این بود که بعد از آپلود، نشانیِ عکس عوض می‌شد ولی خودِ تصویر همان تصویرِ
+ * پیش‌فرض می‌ماند و کاربر نتیجه می‌گرفت «عکس ذخیره نشد» — در حالی که سرور
+ * ۲۰۰ داده بود. حالا همان بایتی که اپ فرستاده برگردانده می‌شود، پس تغییرِ
+ * عکس در حالت آزمایشی هم واقعاً دیده می‌شود.
+ */
+const uploads = new Map();
+
 function todayPayload() {
   const now = new Date();
   const punches = state.punches.map((row) => ({ ...row }));
@@ -167,6 +179,55 @@ function readBody(request) {
       }
     });
   });
+}
+
+/** بدنهٔ خام (بایتی) — برای `multipart` که متن نیست. */
+function readRawBody(request) {
+  return new Promise((resolve) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => resolve(Buffer.concat(chunks)));
+  });
+}
+
+/**
+ * بیرون‌کشیدنِ بخشِ فایل از بدنهٔ `multipart/form-data` — بدون وابستگی.
+ *
+ * فقط همان چیزی که برای تست لازم است: اولین بخشی که `filename` دارد، با
+ * نوعِ خودش و بایت‌های میانِ سرصفحه و مرزِ پایانی. اگر ساختار قابل‌فهم نبود
+ * `null` برمی‌گردد تا مسیرِ ۴۲۲ مثل سرور واقعی جواب دهد، نه اینکه با خطای
+ * داخلی بترکد.
+ */
+function extractFilePart(body, contentType) {
+  const match = /boundary="?([^";]+)"?/i.exec(String(contentType ?? ''));
+  const boundary = match ? match[1].trim() : '';
+
+  if (!boundary) return null;
+
+  const delimiter = Buffer.from(`--${boundary}`);
+  const start = body.indexOf(delimiter);
+  if (start < 0) return null;
+
+  const headerEnd = body.indexOf('\r\n\r\n', start);
+  if (headerEnd < 0) return null;
+
+  const header = body.subarray(start, headerEnd).toString('latin1');
+  if (!/filename=/i.test(header)) return null;
+
+  const mime = (/content-type:\s*([^\r\n;]+)/i.exec(header)?.[1] ?? 'application/octet-stream').trim();
+  const filename = /filename="([^"]*)"/i.exec(header)?.[1] ?? '';
+
+  const bodyStart = headerEnd + 4;
+  const next = body.indexOf(delimiter, bodyStart);
+  if (next < 0) return null;
+
+  // `\r\n` پیش از مرزِ بعدی جزوِ محتوا نیست.
+  let end = next;
+  if (body[end - 2] === 0x0d && body[end - 1] === 0x0a) end -= 2;
+
+  const bytes = body.subarray(bodyStart, Math.max(bodyStart, end));
+
+  return { bytes, mime, filename, size: bytes.length };
 }
 
 /** جدول CRC32 برای ساختِ چانک‌های PNG (استاندارد PNG، بدون وابستگی). */
@@ -248,13 +309,22 @@ const server = createServer(async (request, response) => {
   // عکس پروفایل عمومی است — nginx هم بدون توکن سرو می‌کند و `<img>` هدر
   // Authorization نمی‌فرستد. همان مسیرِ `images/users/` سرور واقعی.
   if (request.method === 'GET' && url.pathname.startsWith('/images/users/')) {
+    const name = decodeURIComponent(url.pathname.slice('/images/users/'.length));
+    const stored = uploads.get(name);
+
+    // اولویت با عکسی است که کاربر واقعاً فرستاده؛ تصویرِ نمونه فقط برای
+    // پیش‌فرض/ناشناخته می‌ماند.
+    const image = stored
+      ? { body: stored.bytes, type: stored.mime }
+      : { body: AVATAR_PNG, type: 'image/png' };
+
     response.writeHead(200, {
-      'Content-Type': 'image/png',
-      'Content-Length': AVATAR_PNG.length,
+      'Content-Type': image.type,
+      'Content-Length': image.body.length,
       'Cache-Control': 'no-store',
       'Access-Control-Allow-Origin': '*',
     });
-    return response.end(AVATAR_PNG);
+    return response.end(image.body);
   }
 
   // این سرور آزمایشی است: هر توکن غیرخالی پذیرفته می‌شود تا بتوانید با curl
@@ -323,26 +393,44 @@ const server = createServer(async (request, response) => {
   /*
    * عکس پروفایل — همان دو مسیر واقعی (`docs/API.md`).
    *
-   * بدنهٔ `multipart` اینجا واقعاً تفسیر نمی‌شود و هدف هم همان نیست: کارِ این
-   * سرور آزمایشی سنجیدنِ سمتِ اپ است. پس هر آپلود پذیرفته می‌شود و یک نامِ
-   * تازه برمی‌گردد تا اپ نشانِ «نشانیِ عکس و کارمندِ تازه‌شده از سرور
-   * می‌آید» را ببیند؛ حذف هم همان کاری را می‌کند که سرور واقعی (`avatar`
-   * را `null` می‌کند و اپ به عکسِ پیش‌فرض برمی‌گردد).
+   * فایل از بدنهٔ `multipart` خوانده و **نگه داشته** می‌شود تا بعداً از همان
+   * مسیرِ `/images/users/<name>` سرو شود. قاعده‌های سرور واقعی هم اینجا
+   * هست: نبودِ فایل و فایلِ غیرتصویری رد می‌شوند، پس اپ می‌تواند مسیرِ
+   * خطا را هم آزمایش کند (نه فقط حالتِ خوش‌بینانه).
    */
   if (path === '/profile/photo' && request.method === 'POST') {
-    // بدنه دور ریخته می‌شود؛ فقط باید خوانده شود تا سوکت بسته نشود.
-    for await (const _chunk of request) {
-      void _chunk;
+    const body = await readRawBody(request);
+    const part = extractFilePart(body, request.headers['content-type']);
+
+    if (!part || part.size === 0) {
+      return send(response, 422, { error: 'photo_required', message: 'عکسی فرستاده نشد.' });
     }
 
-    state.photos += 1;
-    employee.avatar = `uploaded-${state.photos}.png`;
-    console.log(`[mock] photo uploaded → ${employee.avatar}`);
+    if (!part.mime.startsWith('image/')) {
+      return send(response, 422, { error: 'photo_not_image', message: 'فقط عکس پذیرفته می‌شود.' });
+    }
 
-    return send(response, 200, { avatar: employee.avatar, employee });
+    const EXTENSION_BY_MIME = {
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+    };
+
+    state.photos += 1;
+    const extension = EXTENSION_BY_MIME[part.mime] ?? 'jpg';
+    const name = `uploaded-${state.photos}.${extension}`;
+
+    uploads.set(name, { bytes: Buffer.from(part.bytes), mime: part.mime });
+    employee.avatar = name;
+    console.log(`[mock] photo uploaded → ${name} (${part.size} بایت، ${part.mime})`);
+
+    return send(response, 200, { avatar: name, employee });
   }
 
   if (path === '/profile/photo' && request.method === 'DELETE') {
+    if (employee.avatar) uploads.delete(employee.avatar);
+
     employee.avatar = null;
     console.log('[mock] photo removed');
 

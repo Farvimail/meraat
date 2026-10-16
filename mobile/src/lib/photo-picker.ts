@@ -82,6 +82,9 @@ export async function pickProfilePhoto(source: PhotoSource): Promise<PickOutcome
         fileName: asset.fileName ?? null,
         mimeType: asset.mimeType ?? null,
         fileSize: asset.fileSize ?? null,
+        // اندازهٔ واقعیِ تصویر: مبنای هندسهٔ ویرایشگر (چرخش و برشِ مربع).
+        width: asset.width ?? null,
+        height: asset.height ?? null,
       },
     };
   } catch {

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\MobilePresence;
 use App\SavedTime;
 use App\TimerHub;
 use App\User;
@@ -200,6 +201,48 @@ class MobileApiController extends Controller
         $user = $request->attributes->get('mobile_user');
 
         return response()->json($this->todayPayload($user->id));
+    }
+
+    /**
+     * «انگشتِ تغییرِ» امروزِ همین کارمند — سبک‌ترین راهِ فهمیدنِ اینکه رکوردی
+     * عوض شده یا نه.
+     *
+     * چرا لازم است: مدیر از داخلِ سایت (یا خودِ پنل) شروع/توقف را می‌زند و
+     * باید همان لحظه روی گوشی هم دیده شود. اپ دو مسیر دارد: سوکتِ زندهٔ هاب
+     * که کارِ اصلی را می‌کند، و همین پرسشِ پشتیبان برای وقتی که سوکت وصل
+     * نمی‌شود (هاب خاموش، اینترنتِ سختگیر، …). خواندنِ کاملِ `today` هر چند
+     * ثانیه یعنی یک کوئریِ سنگین‌تر و یک پاسخِ بزرگ برای هر گوشی؛ اینجا دو
+     * عدد و یک مُهرِ زمانی برمی‌گردد.
+     *
+     * سه جزء دارد و هر سه لازم است: تعدادِ رکورد، آخرین شناسه (تا حذف/ویرایشِ
+     * یک رکورد هم گرفته شود) و زمانِ تأییدِ حضور (تأییدِ دستیِ مدیر از سمتِ
+     * پنل هم باید روی گوشی دیده شود).
+     */
+    public function revision(Request $request)
+    {
+        $user = $request->attributes->get('mobile_user');
+        $dmy = $this->realDmy();
+
+        $punches = DB::table('tbl_saved_time')
+            ->join('tbl_timer', 'tbl_saved_time.id', '=', 'tbl_timer.saved_time_id')
+            ->join('tbl_calendar', 'tbl_timer.calendar_id', '=', 'tbl_calendar.id')
+            ->where('tbl_calendar.dmy', $dmy)
+            ->where('tbl_timer.customer_id', $user->id)
+            ->where(function ($query) {
+                $query->where('tbl_saved_time.deleted', 0)
+                    ->orWhereNull('tbl_saved_time.deleted');
+            })
+            ->select(DB::raw('count(*) as rows_count'), DB::raw('max(tbl_saved_time.id) as last_id'))
+            ->first();
+
+        $presence = MobilePresence::today($user->id, $dmy);
+
+        return response()->json([
+            'revision' => ($punches->rows_count ?? 0) . ':' . ($punches->last_id ?? 0)
+                . ':' . (empty($presence) ? '-' : (string) $presence->confirmed_at),
+            'dmy' => (int) $dmy,
+            'server_time' => $this->serverTime(),
+        ]);
     }
 
     // ---------------------------------------------------------------- ثبت
@@ -533,6 +576,9 @@ class MobileApiController extends Controller
             'dmy' => (int) $dmy,
             'punches' => $rows,
             'server_time' => $this->serverTime(),
+            // وضعیتِ تأییدِ حضورِ امروز: اپ با همین می‌فهمد بعد از ثبتِ ورود
+            // باید دوربین را باز کند یا نه (`required && !confirmed`).
+            'qr' => MobilePresence::state($customerId, $dmy),
         ];
     }
 
@@ -783,6 +829,69 @@ class MobileApiController extends Controller
         } catch (\Throwable $e) {
             // پاک‌نشدنِ فایلِ قدیمی نباید کارِ کاربر را خراب کند.
         }
+    }
+
+    // ------------------------------------------------------- تأییدِ حضور با QR
+
+    /**
+     * تأییدِ حضور با کدِ چرخانِ QR — `POST /api/v1/qr/confirm`.
+     *
+     * جریانِ تصمیم‌گرفته‌شده: **اول ثبت انجام می‌شود، بعد تأیید**. یعنی اپ
+     * پس از ورودِ موفق، اگر `qr.required && !qr.confirmed` بود، اسکنر را باز
+     * می‌کند و همین مسیر را صدا می‌زند؛ تأیید فقط «این حضور را منِ کارمند و
+     * در برابرِ صفحهٔ پنل تأیید کردم» را ثبت می‌کند.
+     *
+     * چرا اعتبارِ کد اینجا و نه در گوشی سنجیده می‌شود: `MobilePresence::verify`
+     * پنجره را از خودِ کد می‌خواند (نه از ساعتِ گوشی) و MAC را با کلیدی که
+     * فقط سرور دارد می‌سنجد؛ پس دست‌کاریِ ساعتِ گوشی یا کدِ دست‌ساز بی‌اثر است.
+     */
+    public function qrConfirm(Request $request)
+    {
+        $user = $request->attributes->get('mobile_user');
+        $data = $request->json()->all();
+        $code = trim((string) ($data['code'] ?? ''));
+
+        $dmy = $this->realDmy();
+
+        if (! MobilePresence::enabled()) {
+            return $this->fail(503, 'qr_disabled', 'تأیید با QR روی این سرور فعال نیست.');
+        }
+
+        if ($code === '') {
+            return $this->fail(422, 'qr_required', 'کدی خوانده نشد؛ دوباره QR را در قاب بگیرید.');
+        }
+
+        $result = MobilePresence::verify($code, $user->id, time());
+
+        if ($result['status'] === 'foreign') {
+            return $this->fail(422, 'qr_foreign', 'این کد مالِ کارمند دیگری است؛ QR خودت را اسکن کن.');
+        }
+
+        if ($result['status'] === 'expired') {
+            return $this->fail(422, 'qr_expired', 'این کد منقضی شده است؛ صفحهٔ پنل را نگاه کن و دوباره اسکن کن.');
+        }
+
+        if ($result['status'] !== 'ok') {
+            return $this->fail(422, 'qr_invalid', 'این کد معتبر نیست؛ دوباره از روی صفحهٔ پنل اسکن کن.');
+        }
+
+        try {
+            MobilePresence::confirm(
+                $user->id,
+                $dmy,
+                MobilePresence::METHOD_QR,
+                $result['window'],
+                $request->ip()
+            );
+        } catch (\Throwable $error) {
+            return $this->fail(500, 'qr_confirm_failed', 'ثبت تأیید انجام نشد؛ دوباره تلاش کنید.');
+        }
+
+        return response()->json([
+            'confirmed' => true,
+            'qr' => MobilePresence::state($user->id, $dmy),
+            'employee' => $this->employee($user),
+        ]);
     }
 
     private function fail($status, $code, $message)

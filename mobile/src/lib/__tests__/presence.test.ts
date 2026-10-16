@@ -1,0 +1,80 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import {
+  NO_PRESENCE,
+  codeCustomerId,
+  localCodeProblem,
+  looksLikeCode,
+  needsQrScan,
+  presenceNote,
+  presenceOf,
+} from '../presence.ts';
+
+/** کدِ نمونه، همان قالبی که سرور می‌سازد: `v1.<کارمند>.<پنجره>.<۱۶ کاراکتر>`. */
+const OWN_CODE = 'v1.60.1750000000.0f1e2d3c4b5a6978';
+
+test('پاسخِ ناقص یا قدیمیِ سرور → حالتِ پیش‌فرضِ «تأییدی لازم نیست»', () => {
+  assert.deepEqual(presenceOf(undefined), NO_PRESENCE);
+  assert.deepEqual(presenceOf(null), NO_PRESENCE);
+  assert.deepEqual(presenceOf('v1'), NO_PRESENCE);
+  assert.equal(needsQrScan(presenceOf(undefined)), false);
+});
+
+test('حالتِ تأیید درست خوانده می‌شود و مقادیرِ بی‌ربط نادیده می‌مانند', () => {
+  const state = presenceOf({
+    required: true,
+    enabled: true,
+    confirmed: false,
+    method: 'telepathy',
+    confirmed_at: 42,
+    seconds_left: '9',
+  });
+
+  assert.equal(state.required, true);
+  assert.equal(state.enabled, true);
+  assert.equal(state.confirmed, false);
+  assert.equal(state.method, null, 'روشِ ناشناخته باید null شود، نه اینکه خام برود داخل UI');
+  assert.equal(state.confirmedAt, null);
+  assert.equal(state.secondsLeft, 0, 'عددِ غیرعددی نباید NaN به UI بدهد');
+});
+
+test('اسکنر فقط وقتی باز می‌شود که لازم، روشن و تأییدنشده باشد', () => {
+  const base = { enabled: true, required: true, confirmed: false, method: null, confirmedAt: null, secondsLeft: 20 };
+
+  assert.equal(needsQrScan(base), true);
+  assert.equal(needsQrScan({ ...base, confirmed: true }), false);
+  assert.equal(needsQrScan({ ...base, required: false }), false);
+  assert.equal(needsQrScan({ ...base, enabled: false }), false);
+});
+
+test('قالبِ کد سنجیده می‌شود: پیشوند، ارقام و امضای ۱۶ کاراکتری', () => {
+  assert.equal(looksLikeCode(OWN_CODE), true);
+  assert.equal(looksLikeCode(`  ${OWN_CODE}  `), true, 'فاصلهٔ اضافه نباید رد کند');
+  assert.equal(looksLikeCode('v1.60.1750000000.0F1E2D3C4B5A6978'), false, 'امضای سرور با حروف کوچک است');
+  assert.equal(looksLikeCode('v2.60.1750000000.0f1e2d3c4b5a6978'), false, 'قالبِ عوض‌شده باید رد شود');
+  assert.equal(looksLikeCode('https://meraat.piqagram.ir'), false, 'لینکِ معمولی کد نیست');
+  assert.equal(looksLikeCode(''), false);
+});
+
+test('شناسهٔ صاحبِ کد از خودِ کد خوانده می‌شود', () => {
+  assert.equal(codeCustomerId(OWN_CODE), 60);
+  assert.equal(codeCustomerId('v1.7.1750000001.abcdef0123456789'), 7);
+  assert.equal(codeCustomerId('چیزی-دیگر'), null);
+});
+
+test('QR همکار پیش از رفتن به سرور رد می‌شود', () => {
+  assert.equal(localCodeProblem(OWN_CODE, 60), null, 'کدِ خودِ کارمند باید بی‌ایراد باشد');
+  assert.match(String(localCodeProblem('v1.61.1750000000.0123456789abcdef', 60)), /یکی دیگر/);
+  assert.match(String(localCodeProblem('', 60)), /خوانده نشد/);
+  assert.match(String(localCodeProblem('v1.60.1750000000.zz', 60)), /مِرآت نیست/);
+});
+
+test('جملهٔ کارت با وضعیتِ واقعی می‌خواند', () => {
+  const base = { enabled: true, required: true, confirmed: false, method: null, confirmedAt: null, secondsLeft: 20 };
+
+  assert.equal(presenceNote({ ...base, enabled: false }), '', 'وقتی مسیر خاموش است چیزی گفته نمی‌شود');
+  assert.match(presenceNote(base), /اسکن/);
+  assert.match(presenceNote({ ...base, confirmed: true, method: 'qr' }), /QR/);
+  assert.match(presenceNote({ ...base, confirmed: true, method: 'manual' }), /مدیر/);
+});

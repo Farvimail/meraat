@@ -1,8 +1,9 @@
 import * as Crypto from 'expo-crypto';
+import * as Device from 'expo-device';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-import { STORAGE_KEYS } from './config';
+import { DEVICE_NAME, STORAGE_KEYS } from './config';
 
 /**
  * هویت دستگاه.
@@ -20,6 +21,26 @@ export interface DeviceIdentity {
   deviceId: string;
   deviceSecret: string;
   platform: string;
+  /**
+   * برچسبِ خوانا برای مدیر: مدلِ واقعیِ گوشی (مثلاً `Pixel 8`) و اگر دستگاه
+   * مدل نداشت (وب/شبیه‌ساز) همان نامِ پیش‌فرضِ اپ.
+   *
+   * چرا لازم است: در پنل و در خروجیِ `mobile:release --list` باید معلوم باشد
+   * هر کارمند روی کدام گوشی نشسته است؛ `platform` به‌تنهایی فقط «android»
+   * می‌گوید و پنج گوشیِ مختلف یک‌شکل دیده می‌شوند.
+   */
+  label: string;
+}
+
+/** مدلِ گوشی، با افتادن به نامِ پیش‌فرضِ اپ اگر دستگاه گزارش نداد. */
+function deviceLabel(): string {
+  try {
+    const model = typeof Device.modelName === 'string' ? Device.modelName.trim() : '';
+
+    return model === '' ? DEVICE_NAME : model;
+  } catch {
+    return DEVICE_NAME;
+  }
 }
 
 let cached: DeviceIdentity | null = null;
@@ -56,7 +77,12 @@ export async function getDeviceIdentity(): Promise<DeviceIdentity> {
   const existingSecret = await safeGet(STORAGE_KEYS.deviceSecret);
 
   if (existingId && existingSecret) {
-    cached = { deviceId: existingId, deviceSecret: existingSecret, platform: Platform.OS };
+    cached = {
+      deviceId: existingId,
+      deviceSecret: existingSecret,
+      platform: Platform.OS,
+      label: deviceLabel(),
+    };
     return cached;
   }
 
@@ -67,6 +93,6 @@ export async function getDeviceIdentity(): Promise<DeviceIdentity> {
   await safeSet(STORAGE_KEYS.deviceId, deviceId);
   await safeSet(STORAGE_KEYS.deviceSecret, deviceSecret);
 
-  cached = { deviceId, deviceSecret, platform: Platform.OS };
+  cached = { deviceId, deviceSecret, platform: Platform.OS, label: deviceLabel() };
   return cached;
 }

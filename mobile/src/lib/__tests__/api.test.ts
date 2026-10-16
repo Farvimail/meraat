@@ -278,3 +278,156 @@ test('history شمارهٔ صفحه را در query می‌گذارد', async ()
 
   assert.equal(seenUrl, 'https://example.test/api/v1/history?page=3');
 });
+
+/*
+ * مسیرِ XHR آپلود — همان مسیری که در گوشی و مرورگر می‌رود (پیشرفت + مهلتِ
+ * بلند). در `node --test` خبری از `XMLHttpRequest` نیست، پس برای هر تست
+ * یک نمونهٔ جعلی نصب می‌کنیم و بعد برمی‌گردانیم تا بقیهٔ تست‌ها به مسیرِ
+ * `fetch` بروند.
+ */
+class FakeXHR {
+  static last: FakeXHR | null = null;
+
+  upload = {
+    onprogress: null as
+      | ((event: { lengthComputable?: boolean; loaded: number; total: number }) => void)
+      | null,
+  };
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  onabort: (() => void) | null = null;
+  status = 0;
+  responseText = '';
+  method = '';
+  url = '';
+  headers: Record<string, string> = {};
+  sent: unknown = null;
+  aborted = false;
+
+  constructor() {
+    FakeXHR.last = this;
+  }
+
+  open(method: string, url: string): void {
+    this.method = method;
+    this.url = url;
+  }
+
+  setRequestHeader(name: string, value: string): void {
+    this.headers[name] = value;
+  }
+
+  send(body: unknown): void {
+    this.sent = body;
+  }
+
+  abort(): void {
+    this.aborted = true;
+    this.onabort?.();
+  }
+}
+
+async function withFakeXHR(run: () => Promise<void>): Promise<void> {
+  const original = (globalThis as { XMLHttpRequest?: unknown }).XMLHttpRequest;
+  (globalThis as { XMLHttpRequest?: unknown }).XMLHttpRequest = FakeXHR;
+
+  try {
+    await run();
+  } finally {
+    (globalThis as { XMLHttpRequest?: unknown }).XMLHttpRequest = original;
+    FakeXHR.last = null;
+  }
+}
+
+/** XHR در یک میکروتکتِ بعد از `photoForm` ساخته می‌شود؛ صبر می‌کنیم تا آماده شود. */
+async function waitXHR(): Promise<FakeXHR> {
+  for (let attempt = 0; attempt < 50 && FakeXHR.last === null; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+
+  assert.ok(FakeXHR.last, 'باید XMLHttpRequest ساخته می‌شد');
+  return FakeXHR.last;
+}
+
+test('آپلود با XHR: درصد پیشرفت گزارش می‌شود و پاسخ برمی‌گردد', async () => {
+  await withFakeXHR(async () => {
+    const fractions: number[] = [];
+    const client = createApiClient({
+      baseUrl: 'https://example.test/api/v1',
+      getToken: () => 'tok',
+    });
+
+    const pending = client.uploadPhoto(
+      { uri: 'file:///tmp/IMG_2.jpg', name: 'IMG_2.jpg', type: 'image/jpeg' },
+      (fraction) => fractions.push(fraction),
+    );
+
+    const xhr = await waitXHR();
+
+    assert.equal(xhr.method, 'POST');
+    assert.equal(xhr.url, 'https://example.test/api/v1/profile/photo');
+    assert.equal(xhr.headers.Authorization, 'Bearer tok');
+    assert.equal(xhr.headers['Content-Type'], undefined, 'boundary را خودِ XHR باید بسازد');
+    assert.ok(xhr.sent instanceof FormData, 'بدنه باید FormData باشد');
+
+    xhr.upload.onprogress?.({ lengthComputable: true, loaded: 25, total: 100 });
+    xhr.upload.onprogress?.({ lengthComputable: true, loaded: 100, total: 100 });
+
+    xhr.status = 200;
+    xhr.responseText = JSON.stringify({ avatar: 'u1-2.jpg', employee: { id: 1 } });
+    xhr.onload?.();
+
+    const result = await pending;
+    assert.equal(result.avatar, 'u1-2.jpg');
+    assert.deepEqual(fractions, [0.25, 1]);
+  });
+});
+
+test('آپلود با XHR: خطای سرور همان کد و پیام را می‌گیرد', async () => {
+  await withFakeXHR(async () => {
+    const client = createApiClient({
+      baseUrl: 'https://example.test/api/v1',
+      getToken: () => 'tok',
+    });
+
+    const pending = client.uploadPhoto({
+      uri: 'file:///tmp/big.jpg',
+      name: 'big.jpg',
+      type: 'image/jpeg',
+    });
+
+    const xhr = await waitXHR();
+
+    xhr.status = 413;
+    xhr.responseText = JSON.stringify({ error: 'photo_too_large', message: 'حجم عکس بیش از حد مجاز است.' });
+    xhr.onload?.();
+
+    await assert.rejects(pending, (error: unknown) => {
+      assert.ok(error instanceof ApiError);
+      assert.equal(error.code, 'photo_too_large');
+      assert.equal(error.message, 'حجم عکس بیش از حد مجاز است.');
+      return true;
+    });
+  });
+});
+
+test('آپلود با XHR: بدونِ جواب، بعد از مهلت timeout می‌شود و قطع می‌شود', async () => {
+  await withFakeXHR(async () => {
+    const client = createApiClient({
+      baseUrl: 'https://example.test/api/v1',
+      getToken: () => 'tok',
+      uploadTimeoutMs: 10,
+    });
+
+    const pending = client.uploadPhoto({
+      uri: 'file:///tmp/slow.jpg',
+      name: 'slow.jpg',
+      type: 'image/jpeg',
+    });
+
+    const xhr = await waitXHR();
+
+    await assert.rejects(pending, failingFetch('timeout'));
+    assert.equal(xhr.aborted, true, 'باید وسطِ راه قطع شود تا اتصالِ باز نماند');
+  });
+});
