@@ -46,3 +46,11 @@ DEPLOY.md
 deploy
 docker-compose.yml
 docker-compose.prod.yml
+
+# --- mobile app ------------------------------------------------------------
+# The React Native app is its own project with its own dependencies, and the
+# PHP image has no business carrying it: node_modules alone is hundreds of
+# megabytes, and after `expo prebuild` the android/ folder adds a whole Gradle
+# project on top of that. Dockerfile.prod ends with `COPY . .`, so without this
+# line every production build would ship the app to the server.
+mobile

@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "مِرآت حضور",
+    "slug": "meraat-attendance",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ir.piqagram.meraat.attendance"
+    },
+    "android": {
+      "package": "ir.piqagram.meraat.attendance",
+      "adaptiveIcon": {
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.VIBRATE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "برای ثبت حضور، به تأیید هویت با Face ID نیاز است."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "برای انتخاب عکس پروفایل، دسترسی به عکس‌های شما لازم است.",
+          "cameraPermission": "برای گرفتن عکس پروفایل، دسترسی به دوربین لازم است.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": "برای نگه‌داشتن امن نشست، به دسترسی Secure Enclave نیاز است."
+        }
+      ],
+      "expo-audio"
+    ]
+  }
+}
