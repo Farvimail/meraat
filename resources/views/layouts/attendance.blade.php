@@ -50,6 +50,11 @@
     <script src="{{ asset('js/app.js') }}?v={{ filemtime(public_path('js/app.js')) }}"></script>
     <script src="{{ asset('js/ajax.js') }}?v={{ filemtime(public_path('js/ajax.js')) }}"></script>
     <script src="{{ asset('js/timer.js') }}?v={{ filemtime(public_path('js/timer.js')) }}"></script>
+
+    {{-- QR تأییدِ حضور: کدگذارِ محلی (نسخهٔ کلاسیکِ toqr) + کدِ پنل.
+         محلی است و نه CDN، تا بدونِ دسترسی به بیرون هم کد ساخته شود. --}}
+    <script src="{{ asset('js/vendor/toqr.js') }}?v={{ filemtime(public_path('js/vendor/toqr.js')) }}"></script>
+    <script src="{{ asset('js/panel-qr.js') }}?v={{ filemtime(public_path('js/panel-qr.js')) }}"></script>
 </head>
 <body class="panel-page attendance-page">
 
@@ -85,7 +90,11 @@
                 </a>
 
                 @if ($attRole)
-                    <a class="btn btn-sm btn-primary"
+                    {{-- کلاسِ اختصاصی و نه `btn btn-primary`: آبیِ `btn-primary`
+                         عمداً در این سامانه نگه داشته شده چون رنگِ وضعیتِ روزهای
+                         تقویم است؛ این دکمه به تقویم ربطی ندارد، پس با رنگِ خودِ
+                         پنل می‌آید. توضیح در panel.css. --}}
+                    <a class="att-topbtn"
                        href="{{ auth('manager')->check() ? url('manager') : url('admin') }}">پنل مدیریت</a>
                 @endif
             @else

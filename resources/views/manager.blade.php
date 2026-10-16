@@ -505,6 +505,18 @@ use Illuminate\Support\Facades\Auth;
                                                 <a href="customers/archive/id/{{$item->customer_id}}" class=""
                                                    onclick="return confirm('کارمند به آرشیو منتقل شود؟ از فهرست فعال‌ها و کارت‌های تایمر خارج می‌شود ولی همهٔ داده‌هایش می‌ماند و با «بازگردانی» برمی‌گردد.')">آرشیو</a>
                                             </form>
+
+                                            {{-- راهِ فرارِ مدیر: روزی که دوربینِ گوشیِ کارمند کار
+                                                 نمی‌کند یا QR به هر دلیلی خوانده نمی‌شود، تأییدِ حضور را
+                                                 مدیر با دست ثبت می‌کند (با همان جدول، فقط
+                                                 method=manual). کارِ مدیر است، پس جایش همین بخشِ
+                                                 «کارمندها» است؛ آن مربعِ QR در صفحهٔ حضور و غیاب
+                                                 می‌ماند. `type="button"` لازم است، وگرنه فرمِ بالای
+                                                 همین کارت را می‌فرستاد. --}}
+                                            <div class="presence-confirm-row">
+                                                <button type="button" class="presence-confirm"
+                                                        data-presence-confirm-manual="{{ $item->customer_id }}">تأیید دستیِ حضور</button>
+                                            </div>
                                         </div>
                                         <ul class="list-group list-group-flush">
                                             <nav>

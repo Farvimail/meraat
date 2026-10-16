@@ -10,7 +10,6 @@ use App\Http\Controllers\CustomerContactController;
 use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\TimerController;
 use App\Http\Controllers\FunctionsController;
-use Illuminate\Support\Facades\Auth;
 
 //var_dump(auth()->guard('manager')->id());
 //var_dump(PointsController::managerData(auth()->guard('manager')->id()))
@@ -111,15 +110,30 @@ use Illuminate\Support\Facades\Auth;
                                 <div class="col-md-4">
                                     <div class="card">
                                         @php($userPhoto = \App\Http\Controllers\PhotoController::show($item->customer_id)->orderBy('tbl_users_profile.id','desc')->first())
-                                        @if($userPhoto)
-                                            <img src="images/users/{{$userPhoto->name}}" class="card-img-top" alt="...">
-                                        @else
-                                            <img src="{{asset('images/users/PRP.jpg')}}" class="card-img-top" alt="...">
-                                        @endif
+                                        {{-- عکس به‌همراهِ مربعِ QR تأییدِ حضور در گوشهٔ پایینِ همان عکس.
+                                             کدهای چرخان را سرور می‌سازد و `js/panel-qr.js` می‌کشد
+                                             (هر ۳۰ ثانیه یک درخواست برای همهٔ کارت‌های صفحه). --}}
+                                        <div class="presence-photo">
+                                            @if($userPhoto)
+                                                <img src="images/users/{{$userPhoto->name}}" class="card-img-top" alt="...">
+                                            @else
+                                                <img src="{{asset('images/users/PRP.jpg')}}" class="card-img-top" alt="...">
+                                            @endif
+
+                                            <span class="presence-qr" data-presence-qr
+                                                  data-customer-id="{{ $item->customer_id }}"
+                                                  title="QR تأییدِ حضور — با دوربینِ اپ اسکن کنید">
+                                                <canvas aria-hidden="true"></canvas>
+                                            </span>
+                                        </div>
                                         <div class="card-body">
                                             <input type="hidden" name="customer_id" value="{{$item->customer_id}}"/>
                                             <h5 class="card-title text-center">{{AppendCustomerController::showCustomer($item->customer_id)->name}}</h5>
                                             <h6 class="card-subtitle mb-2 text-center" style="direction: rtl">{{!empty(AppendRolesController::selectedManagerRole(\App\Http\Controllers\CalendarController::findPackage(), $item->customer_id))?AppendRolesController::selectedManagerRole(\App\Http\Controllers\CalendarController::findPackage(), $item->customer_id)->name:'در حال انتخاب'}}</h6>
+
+                                            {{-- «تأیید دستیِ حضور» عمداً اینجا نیست: این صفحه جای QR است
+                                                 (کارمند گوشی‌اش را مقابلش می‌گیرد) و تأییدِ دستی کارِ مدیر
+                                                 است؛ دکمه‌اش در بخشِ «کارمندها»ی پنل مدیریت نشسته. --}}
                                         </div>
                                         <ul class="list-group list-group-flush">
                                             <div class="tab-pane fade col-12 show active" id="nav-presents-{{$item->customer_id}}" role="tabpanel" aria-labelledby="nav-presents-tab-{{$item->customer_id}}">

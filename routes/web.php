@@ -50,6 +50,12 @@ Route::get('/read/timer','TimerController@show');
 // بدون رفرشِ دستی و بدون یک درخواست سنگین برای هر کارت در پنل دیده شود.
 Route::get('/read/timer-revision','TimerController@revision');
 
+// کدهای QR تأییدِ حضور برای پنل (نشستِ مدیر) و ثبتِ تأییدِ دستیِ مدیر.
+// GET است تا درخواستِ دوره‌ایِ پنل با همان چیزی که هست ساده بماند و کدهای
+// کوتاه‌عمر در کش نیفتند؛ احراز هویت داخلِ خودِ کنترلر است.
+Route::get('/read/qr-codes','PresenceQrController@codes');
+Route::post('/read/qr-confirm-manual','PresenceQrController@manual');
+
 Route::get('/past/day', 'TimerController@pastDays');
 
 Route::get('/salary/table/month/{month_id}', 'SalaryController@salaryTable');

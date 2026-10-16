@@ -78,6 +78,14 @@
     <script src="{{ asset('js/app.js') }}?v={{ filemtime(public_path('js/app.js')) }}"></script>
     <script src="{{ asset('js/ajax.js') }}?v={{ filemtime(public_path('js/ajax.js')) }}"></script>
     <script src="{{ asset('js/timer.js') }}?v={{ filemtime(public_path('js/timer.js')) }}"></script>
+
+    {{-- تأییدِ حضور: همین پنل دکمهٔ «تأیید دستیِ حضور» را دارد (بخشِ کارمندها)
+         و مارک‌آپِ QR هم در صفحهٔ حضور و غیاب است. هر دو از یک فایل می‌آیند،
+         پس هر دو پوسته باید همان فایل‌ها را بیاورند — وگرنه یک صفحه دکمه‌ای
+         می‌گیرد که کسی به کلیکش گوش نمی‌دهد. محلی و بدون CDN، مثل همهٔ
+         اسکریپت‌های این پروژه. --}}
+    <script src="{{ asset('js/vendor/toqr.js') }}?v={{ filemtime(public_path('js/vendor/toqr.js')) }}"></script>
+    <script src="{{ asset('js/panel-qr.js') }}?v={{ filemtime(public_path('js/panel-qr.js')) }}"></script>
 </head>
 <body class="panel-page">
 
