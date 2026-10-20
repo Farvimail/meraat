@@ -67,6 +67,9 @@ function prepareAudioMode(): Promise<void> {
   audioMode ??= setAudioModeAsync({
     playsInSilentMode: true,
     interruptionMode: 'mixWithOthers',
+    // بلندگوی گوشی و نه گوشیِ مکالمه: صدای تأیید باید از همان جایی بیاید که
+    // گوشیِ در دست کاربر انتظار دارد، حتی اگر مسیرِ صدا از قبل عوض شده باشد.
+    shouldRouteThroughEarpiece: false,
   }).then(
     () => undefined,
     () => undefined,
@@ -89,6 +92,9 @@ export function playPunchSound(intent: PunchIntent): void {
         await player.seekTo(0);
       }
 
+      // بلندیِ کامل، صریح و هر بار: در کارگاه یا راهرو باید از جیب هم شنیده
+      // شود، و اگر کاربر کم‌تر بخواهد بلندیِ رسانهٔ گوشی را پایین می‌آورد.
+      player.volume = 1;
       player.play();
     } catch {
       // بی‌صدا شدن اپ هرگز نباید ثبت را ناموفق کند.

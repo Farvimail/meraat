@@ -66,4 +66,6 @@ export const STORAGE_KEYS = {
   employee: 'meraat.session.employee',
   deviceId: 'meraat.device.id',
   deviceSecret: 'meraat.device.secret',
+  /** آخرین خطای مرگبار (برای نشان‌دادنش در صفحهٔ ورود). */
+  lastCrash: 'meraat.last.crash',
 } as const;

@@ -5,8 +5,7 @@ import { AppState } from 'react-native';
 
 import { ApiError, createApiClient } from './lib/api';
 import type { ApiClient } from './lib/api';
-import { getBiometricStatus, verifyBiometric } from './lib/biometrics';
-import type { BiometricStatus } from './lib/biometrics';
+import { verifyBiometric } from './lib/biometrics';
 import { API_BASE_URL, API_ORIGIN, REQUEST_TIMEOUT_MS, STORAGE_KEYS } from './lib/config';
 import { reachableFromError } from './lib/connection';
 import type { ConnectionState } from './lib/connection';
@@ -43,8 +42,6 @@ interface SessionValue {
    * گذشت زمانِ گوشی به آن اضافه می‌شود، پس ساعتِ اشتباه گوشی آن را خراب نمی‌کند.
    */
   liveClock: string;
-  /** آمادگی اثر انگشتِ همین گوشی؛ تا وقتی خوانده نشده `null`. */
-  biometric: BiometricStatus | null;
   /**
    * «به سرور می‌رسیم یا نه» — از نتیجهٔ آخرین درخواست‌ها به‌روز می‌شود.
    *
@@ -152,7 +149,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoProgress, setPhotoProgress] = useState<number | null>(null);
   const [liveClock, setLiveClock] = useState('');
-  const [biometric, setBiometric] = useState<BiometricStatus | null>(null);
   const [connection, setConnection] = useState<ConnectionState>('checking');
   const [presence, setPresence] = useState<PresenceState>(NO_PRESENCE);
   const [presenceBusy, setPresenceBusy] = useState(false);
@@ -292,30 +288,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     return () => clearTimeout(timer);
   }, [status, presence.pending, presence.expiresAt, refreshToday]);
-
-  /**
-   * آمادگی اثر انگشت همین گوشی.
-   *
-   * قیدِ امنیتیِ اپ در لحظهٔ ثبت هم دوباره بررسی می‌شود، ولی نمایشِ آن پیش از
-   * ضربه لازم است: اگر روی گوشی اثری ثبت نشده باشد، کاربر باید بداند که الان
-   * نمی‌تواند ثبت کند، نه اینکه بعد از ضربه پیام خطا بگیرد.
-   */
-  useEffect(() => {
-    if (status !== 'signedIn') {
-      setBiometric(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    void getBiometricStatus().then((value) => {
-      if (!cancelled) setBiometric(value);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [status]);
 
   useEffect(() => {
     let cancelled = false;
@@ -625,6 +597,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         device_id: device.deviceId,
         intent,
         biometric_verified_at: outcome.at,
+        /*
+         * فاصلهٔ تأیید تا همین لحظه — و **نه** مهرِ زمانیِ مطلق.
+         *
+         * چرا: سرور مهرِ زمانی را با ساعتِ خودش می‌سنجد و یک گوشی با ساعتِ
+         * اشتباه (روی یک گوشیِ واقعی ۷۴ دقیقه عقب بود) هر ثبت را
+         * `biometric_required` می‌گرفت، هرچند اثر انگشت تطبیق خورده بود. فاصله
+         * را خودِ گوشی با ساعتِ خودش می‌سنجد، پس اختلافِ ساعتِ گوشی با سرور
+         * دیگر در کار نیست؛ سرور فقط می‌گوید «این فاصله کوتاه است یا نه».
+         */
+        biometric_age_ms: Math.max(0, Date.now() - outcome.at),
         biometric_kind: outcome.kind,
       });
 
@@ -675,7 +657,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       today,
       serverClock,
       liveClock,
-      biometric,
       connection,
       error,
       busy,
@@ -701,7 +682,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       today,
       serverClock,
       liveClock,
-      biometric,
       connection,
       error,
       busy,

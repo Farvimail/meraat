@@ -272,7 +272,7 @@ class MobileApiController extends Controller
             return $this->fail(403, 'outside_office_network', 'ثبت فقط از شبکهٔ محل کار انجام می‌شود.');
         }
 
-        if (!$this->biometricFresh($data['biometric_verified_at'] ?? null)) {
+        if (!$this->biometricFresh($data['biometric_verified_at'] ?? null, $data['biometric_age_ms'] ?? null)) {
             return $this->fail(422, 'biometric_required', 'تأیید اثر انگشت انجام نشده است.');
         }
 
@@ -529,9 +529,27 @@ class MobileApiController extends Controller
      * این یک **ادعای کلاینت** است، نه مدرک: API سیستم‌عامل نمی‌گوید کدام انگشت
      * تطبیق خورد. کارش فقط بستن راهِ درخواست‌های تمام‌خودکار است. امنیت واقعی
      * از «گوشیِ بسته‌شده به کارمند» و توکن می‌آید.
+     *
+     * دو شکلِ ورودی پذیرفته می‌شود و **فاصله** مقدم است:
+     *
+     *   • `biometric_age_ms` — «چند میلی‌ثانیه از تأیید گذشته». هر دو سرِ این
+     *     فاصله با ساعتِ خودِ گوشی خوانده می‌شود، پس ساعتِ اشتباهِ گوشی هیچ
+     *     اثری ندارد. این همان چیزی است که روی یک گوشیِ واقعی لازم شد: ساعتِ
+     *     گوشی ۷۴ دقیقه عقب بود و هر ثبت با `biometric_required` رد می‌شد،
+     *     هرچند اثر انگشت تطبیق خورده بود.
+     *   • `biometric_verified_at` — مهرِ زمانیِ مطلق، برای اپِ قدیمی. همان
+     *     قاعدهٔ قبلی: نه در آینده‌تر از چند ثانیه، نه کهنه‌تر از پنجره.
      */
-    private function biometricFresh($value)
+    private function biometricFresh($value, $age = null)
     {
+        if ($age !== null && is_numeric($age)) {
+            $ageMs = (int) $age;
+
+            // چند ثانیه هم روی پنجره گذاشته می‌شود: تأییدِ انگشت، بعدش بستهٔ
+            // شدنِ پنجرهٔ سیستم و رفت‌وبرگشتِ شبکه هم وقت می‌برد.
+            return $ageMs >= 0 && $ageMs <= (self::BIOMETRIC_WINDOW + 5) * 1000;
+        }
+
         if ($value === null || !is_numeric($value)) {
             return false;
         }

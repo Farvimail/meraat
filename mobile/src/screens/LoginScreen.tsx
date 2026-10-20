@@ -28,6 +28,8 @@ import {
 } from '../components/ui';
 import { API_BASE_URL } from '../lib/config';
 import { CONNECTION_RETRY_MS, connectionNote } from '../lib/connection';
+import { clearCrash, readCrash } from '../lib/crash-log';
+import type { CrashRecord } from '../lib/crash-log';
 import { useSession } from '../session';
 import { colors, radius, shadow, spacing } from '../theme';
 
@@ -59,6 +61,13 @@ export default function LoginScreen() {
    * بزند — همان چیزی که در صفحهٔ ورودِ وب هم حل کرده‌ایم.
    */
   const [pending, setPending] = useState(false);
+  /**
+   * آخرین خطای مرگبار، اگر اپ دفعهٔ قبل بسته شده باشد.
+   *
+   * چرا در صفحهٔ ورود: همان‌جایی است که کاربر بعد از باز کردنِ دوبارهٔ اپ
+   * می‌رسد و ما هیچ راهِ دیگری برای دیدنِ پیامِ خطا روی گوشیِ او نداریم.
+   */
+  const [crash, setCrash] = useState<CrashRecord | null>(null);
 
   const offline = connection === 'offline';
   const checking = connection === 'checking';
@@ -72,6 +81,23 @@ export default function LoginScreen() {
   useEffect(() => {
     void checkConnection();
   }, [checkConnection]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void readCrash().then((value) => {
+      if (!cancelled) setCrash(value);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const dismissCrash = () => {
+    setCrash(null);
+    void clearCrash();
+  };
 
   /** تا وقتی قطع است، خودمان هر چند ثانیه تست می‌کنیم. */
   useEffect(() => {
@@ -201,6 +227,21 @@ export default function LoginScreen() {
               />
 
               <PrimaryButton label="ورود" onPress={submit} loading={busy} disabled={!canSubmit} />
+
+              {/* گزارشِ خطای قبلی — فقط وقتی هست که واقعاً خطایی ثبت شده باشد؛
+                  تا کاربر پاکش نکند برای پشتیبانی باقی می‌ماند. */}
+              {crash ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="پاک کردن گزارش خطای قبلی"
+                  onPress={dismissCrash}
+                  style={styles.crashBox}
+                >
+                  <Text style={styles.crashTitle}>گزارشِ خطای دفعهٔ قبل (برای پشتیبانی)</Text>
+                  <Text style={styles.crashText}>{crash.message}</Text>
+                  <Text style={styles.crashHint}>برای پاک کردن، لمس کنید.</Text>
+                </Pressable>
+              ) : null}
             </Card>
           </FadeInView>
 
@@ -384,6 +425,34 @@ const styles = StyleSheet.create({
   modalAction: {
     alignSelf: 'stretch',
     marginTop: spacing.xs,
+  },
+  crashBox: {
+    gap: 4,
+    padding: spacing.sm,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.bg,
+  },
+  crashTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.danger,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  crashText: {
+    fontSize: 11.5,
+    lineHeight: 19,
+    color: colors.ink,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  crashHint: {
+    fontSize: 10.5,
+    color: colors.muted,
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   note: {
     fontSize: 12,

@@ -537,39 +537,48 @@ export default function DashboardScreen() {
         </FadeInView>
       </ScrollView>
 
-      <PresenceScanSheet
-        visible={scanOpen}
-        busy={presenceBusy}
-        employeeId={employee?.id ?? null}
-        note={scanNote}
-        onCode={async (code) => {
-          const ok = await confirmPresence(code);
+      {/* شیتِ اسکنر فقط وقتی باز است سوار می‌شود.
 
-          if (ok) {
-            // اگر اسکن برای ثبت بود، همان ثبت را ادامه بده: ادعای «۳۰ ثانیه
-            // فرصت» وقتی معنی دارد که اثرِ انگشت بلافاصله پرسیده شود، نه
-            // اینکه کارمند یادش برود دوباره دکمه را بزند و مهلت بسوزد.
-            //
-            // مهلتِ کوتاه پیش از پرسش، برای بسته شدنِ کاملِ شیتِ دوربین است؛
-            // روی iOS باز کردنِ اثرِ انگشت روی مودالِ در حالِ بسته شدن شکست
-            // می‌خورد.
-            const resumePunch = punchFlowRef.current;
+          چرا: تا پیش از این همیشه در درخت بود و بنابراین `useCameraPermissions`
+          همان لحظهٔ رسیدن به داشبورد، پس از ورود، با دوربینِ نیتیو حرف می‌زد.
+          حالا اولین لحظهٔ بعد از ورود فقط همان چیزی را دارد که لازم دارد؛ دوربین
+          و حسگر وقتی صدا زده می‌شوند که کارمند واقعاً بخواهد اسکن کند. سودِ
+          جانبی: وضعیتِ «کدِ فرستاده‌شده» هم با هر باز شدن خودش صفر می‌شود. */}
+      {scanOpen ? (
+        <PresenceScanSheet
+          visible
+          busy={presenceBusy}
+          employeeId={employee?.id ?? null}
+          note={scanNote}
+          onCode={async (code) => {
+            const ok = await confirmPresence(code);
 
-            setScanNote(null);
-            closeScan();
+            if (ok) {
+              // اگر اسکن برای ثبت بود، همان ثبت را ادامه بده: ادعای «۳۰ ثانیه
+              // فرصت» وقتی معنی دارد که اثرِ انگشت بلافاصله پرسیده شود، نه
+              // اینکه کارمند یادش برود دوباره دکمه را بزند و مهلت بسوزد.
+              //
+              // مهلتِ کوتاه پیش از پرسش، برای بسته شدنِ کاملِ شیتِ دوربین است؛
+              // روی iOS باز کردنِ اثرِ انگشت روی مودالِ در حالِ بسته شدن شکست
+              // می‌خورد.
+              const resumePunch = punchFlowRef.current;
 
-            if (resumePunch) {
-              setTimeout(() => void punch({ presenceJustConfirmed: true }), 350);
+              setScanNote(null);
+              closeScan();
+
+              if (resumePunch) {
+                setTimeout(() => void punch({ presenceJustConfirmed: true }), 350);
+              }
+
+              return true;
             }
 
-            return true;
-          }
-
-          setScanNote(errorRef.current ?? 'تأیید نشد؛ دوباره تلاش کنید.');
-          return false;
-        }}
-        onClose={closeScan}
-      />
+            setScanNote(errorRef.current ?? 'تأیید نشد؛ دوباره تلاش کنید.');
+            return false;
+          }}
+          onClose={closeScan}
+        />
+      ) : null}
 
       {/* ویرایشگرِ عکس: بعد از انتخاب از گالری/دوربین باز می‌شود (بیرون از
           کارتِ پروفایل، چون مودالِ تمام‌صفحهٔ خودش را می‌خواهد) و بعد از

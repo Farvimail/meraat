@@ -107,15 +107,37 @@ function silence(seconds) {
 }
 
 /**
+ * بلندتر کردنِ «حس‌شده» بدونِ کلیپ‌شدن — همان کاری که استودیوها با لیمیتر
+ * می‌کنند.
+ *
+ * چرا لازم شد: صدای ثبت در محیطِ کارگاه و راهرو گم می‌شد؛ کاربر باید مطمئن
+ * شود ثبت انجام شده و صدای نیم‌بند، آن اطمینان را نمی‌داد. راهِ ساده «بلندتر
+ * کردنِ فایل» نیست — سقفِ ۱۶ بیتی زود کلیپ می‌کند و صدای خش می‌گیرد. پس
+ * نمونه‌ها را با یک تابعِ نرم (تانژانتِ هذلولی) فشرده می‌کنیم: قله‌ها آرام
+ * می‌شوند و بخش‌های کم‌بلند بیشتر بالا می‌آیند؛ نتیجه در همان قله، بلندیِ
+ * بیشتری دارد.
+ *
+ * `drive` عمداً کم است (۱٫۸): هارمونیکِ اضافه‌ی بیش از این، زنگِ گرم را به
+ * «بوقِ تیز» تبدیل می‌کند.
+ */
+function louder(samples, drive = 1.8) {
+  const ceiling = Math.tanh(drive);
+
+  return samples.map((value) => Math.tanh(value * drive) / ceiling);
+}
+
+/**
  * پایانی: نرمال‌سازی، پوشِ ابتدا/انتها و جلوگیری از کلیکِ پایانی.
  *
  * بدون این پوش، بلندگوی کوچکِ گوشی یک «تق»ِ ناخوشایند در ابتدا و انتها پخش
  * می‌کند؛ این بیشترین چیزی است که «بی‌کیفیت» به نظر می‌رسد.
  *
- * `level` سقفِ بلندیِ نهایی است. صداهای تیزتر با همان ۰٫۷۲ آزاردهنده‌تر
- * شنیده می‌شوند، پس سبک‌ها می‌توانند بلندیِ خودشان را کمی پایین‌تر بگذارند.
+ * `level` سقفِ بلندیِ نهایی است. پیش‌فرض ۰٫۹۶ است و نه ۰٫۷۲: فایل با تمامِ
+ * ظرفیتِ ۱۶ بیت نوشته می‌شود تا بلندگوی گوشی چیزی برای از دست دادن نداشته
+ * باشد. صداهای تیزتر با همان ۰٫۹۶ آزاردهنده‌تر شنیده می‌شوند، پس سبک‌ها
+ * می‌توانند بلندیِ خودشان را کمی پایین‌تر بگذارند.
  */
-function finish(samples, level = 0.72) {
+function finish(samples, level = 0.96) {
   let peak = 0;
   for (const sample of samples) peak = Math.max(peak, Math.abs(sample));
 
@@ -155,7 +177,7 @@ const STYLES = {
     gain: 0.5,
     attack: 0.012,
     cutoff: 3200,
-    level: 0.62,
+    level: 0.96,
     length: 0.38,
     gap: 0.05,
     notes: { in: [440, 659.25], out: [659.25, 440] },
@@ -200,13 +222,15 @@ for (const [name, style] of Object.entries(STYLES)) {
     const [first, second] = style.notes[intent];
 
     const rendered = finish(
-      lowpass(
-        concat([
-          note(first, style.length, style),
-          silence(style.gap),
-          note(second, style.length * 1.15, { ...style, gain: style.gain * 0.95 }),
-        ]),
-        style.cutoff,
+      louder(
+        lowpass(
+          concat([
+            note(first, style.length, style),
+            silence(style.gap),
+            note(second, style.length * 1.15, { ...style, gain: style.gain * 0.95 }),
+          ]),
+          style.cutoff,
+        ),
       ),
       style.level,
     );
