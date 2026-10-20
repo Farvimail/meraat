@@ -58,7 +58,16 @@ interface SessionValue {
   signIn(email: string, password: string): Promise<void>;
   signOut(): Promise<void>;
   refresh(): Promise<void>;
-  punch(): Promise<void>;
+  /**
+   * ثبتِ نوبتِ بعدی.
+   *
+   * `presenceJustConfirmed` فقط برای مسیری است که همین لحظه اسکنِ QR موفق
+   * شده است: آنجا `presence`ِ داخلِ همین رندر هنوز قدیمی است (React حالت را
+   * بعد از رندر می‌نشاند) و اگر قفلِ محلی را می‌سنجیدیم، تأییدِ تازه را نمی‌دید
+   * و ثبت را رد می‌کرد. سرور مستقل همان لحظه تأیید را می‌سنجد، پس این گزینه
+   * فقط میان‌برِ UI است، نه باز کردنِ راهِ دور زدن.
+   */
+  punch(options?: { presenceJustConfirmed?: boolean }): Promise<void>;
   /** در حال فرستادن یا حذفِ عکس پروفایل؛ تا تمام شدن، دکمه‌ها باید قفل باشند. */
   photoBusy: boolean;
   /**
@@ -151,6 +160,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const tokenRef = useRef<string | null>(null);
 
   /**
+   * یک ثبت در جریان است؟
+   *
+   * دو مسیر می‌توانند هم‌زمان ثبت بخواهند: ضربهٔ خودِ کاربر و ادامهٔ خودکارِ
+   * بعد از اسکنِ موفق. دومی چند صد میلی‌ثانیه بعد از تأیید اجرا می‌شود و
+   * دکمه هم همان لحظه آزاد است؛ بدونِ این نگهبان، دو پرسشِ اثرِ انگشت پشتِ
+   * هم می‌آید و ضربهٔ دوم به ۴۰۹ِ «قبلاً ثبت شده» می‌خورد.
+   */
+  const punchInFlight = useRef(false);
+
+  /**
    * ساعت سرور لنگر می‌شود، نه ساعت گوشی: زمانِ رسیدن پاسخ را نگه می‌داریم و
    * از آن به بعد فقط «گذشت زمان» را اضافه می‌کنیم. این‌طور ساعتِ اشتباه گوشی
    * یا ناحیهٔ زمانیِ دستگاه روی محاسبهٔ کارکرد اثر نمی‌گذارد.
@@ -211,6 +230,22 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
+   * وضعیتِ امروز را از سرور تازه می‌کند.
+   *
+   * خطا عمدتاً خفه است: این یک تازه‌سازیِ پس‌زمینه است (مثلاً بعد از پایانِ
+   * مهلتِ تأیید) و نباید روی صفحه خطای ترسناک بگذارد. اگر نشد، دفعهٔ بعد که
+   * کارمند کاری کرد یا اسکن کرد، وضعیت دوباره خوانده می‌شود.
+   */
+  const refreshToday = useCallback(async () => {
+    try {
+      applyToday(await client.today());
+      setConnection('online');
+    } catch {
+      // بی‌صدا؛ وضعیتِ فعلی می‌ماند.
+    }
+  }, [client, applyToday]);
+
+  /**
    * تیکِ یک‌ثانیه‌ای.
    *
    * سه چیز به آن وابسته‌اند: ساعتِ زندهٔ سرصفحه، تایمرِ کارکرد، و «کارکرد تا
@@ -229,6 +264,34 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
   }, [status, currentClock]);
+
+  /**
+   * پایانِ مهلتِ تأییدِ حضور (پیش‌فرض ۳۰ ثانیه).
+   *
+   * تأیید فقط می‌گوید «همین حالا در برابرِ کارت بودم»؛ بعد از آن باید دوباره
+   * اسکن شود. سرور خودش همین را در `blocksPunch` اجرا می‌کند و `lock` را نیز
+   * برمی‌گرداند؛ ولی تا پاسخِ بعدی، دکمه باز می‌ماند و کارمند یک ضربهٔ
+   * بی‌نتیجه می‌زند. پس همان لحظهٔ پایانِ مهلت، وضعیت را تازه می‌کنیم تا دکمه
+   * دوباره قفل شود و جملهٔ «دوباره اسکن کن» جایش را بگیرد.
+   */
+  useEffect(() => {
+    if (status !== 'signedIn' || !presence.pending || presence.expiresAt == null) {
+      return;
+    }
+
+    const left = presence.expiresAt - Date.now();
+
+    if (left <= 0) {
+      void refreshToday();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void refreshToday();
+    }, left + 300);
+
+    return () => clearTimeout(timer);
+  }, [status, presence.pending, presence.expiresAt, refreshToday]);
 
   /**
    * آمادگی اثر انگشت همین گوشی.
@@ -520,15 +583,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [rows, dmy, serverClock],
   );
 
-  const punch = useCallback(async () => {
+  const punch = useCallback(async (options?: { presenceJustConfirmed?: boolean }) => {
     // قفلِ تأییدِ حضور **پیش از** هر کاری: نه اثر انگشت می‌خواهیم و نه
     // درخواستی به سرور می‌فرستیم که قطعاً رد می‌شود (`presence_required`).
     // خودِ قاعده در سرور اجرا می‌شود؛ این فقط همان را زودتر می‌گوید.
-    if (presenceLocksPunch(presence)) {
+    //
+    // استثنا: وقتی همین لحظه اسکن موفق شده، حالتِ حضور هنوز در همین رندر
+    // قدیمی است؛ در آن مسیر قفلِ محلی را نمی‌سنجیم (سرور می‌سنجد).
+    if (!options?.presenceJustConfirmed && presenceLocksPunch(presence)) {
       setError(PUNCH_LOCK_NOTE);
       return;
     }
 
+    if (punchInFlight.current) {
+      return;
+    }
+
+    punchInFlight.current = true;
     setError(null);
     setBusy(true);
 
@@ -591,6 +662,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       noteFailure(failure);
       setError(messageForError(failure));
     } finally {
+      punchInFlight.current = false;
       setBusy(false);
     }
   }, [client, today.nextIntent, applyToday, noteFailure, presence]);

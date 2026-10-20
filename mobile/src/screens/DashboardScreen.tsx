@@ -29,10 +29,19 @@ import {
   formatDmyFull,
   formatJalaliShort,
   formatStopwatch,
+  toPersianDigits,
 } from '../lib/jalali';
 import { PUNCH_LABEL, workedSeconds } from '../lib/punch';
 import { PresenceScanSheet } from '../components/presence-scan';
-import { PUNCH_LOCK_NOTE, needsQrScan, presenceNote, presenceLocksPunch } from '../lib/presence';
+import {
+  PUNCH_LOCK_NOTE,
+  needsQrScan,
+  presenceExpired,
+  presenceLocksPunch,
+  presenceNote,
+  presenceReaskNote,
+  presenceSecondsLeft,
+} from '../lib/presence';
 import { useSession } from '../session';
 import { colors, radius, spacing } from '../theme';
 import HistoryScreen from './HistoryScreen';
@@ -68,6 +77,18 @@ export default function DashboardScreen() {
   /** شیتِ اسکنِ QR تأییدِ حضور و پیامِ نتیجهٔ همین شیت. */
   const [scanOpen, setScanOpen] = useState(false);
   const [scanNote, setScanNote] = useState<string | null>(null);
+  /**
+   * آیا این اسکن برای ثبت است (از دکمهٔ پایین) یا فقط تأییدِ حضور (از کارت)؟
+   *
+   * فرقشان مهم است: اگر کارمند روی «خروج» زده و بعد اسکن کرده، بعد از تأیید
+   * مستقیماً اثرِ انگشت را هم می‌پرسیم تا در همان ۳۰ ثانیه ثبت تمام شود؛ ولی
+   * اگر از کارتِ تأیید اسکن کرده، ثبتی نمی‌سازیم — او فقط تأیید خواسته است.
+   *
+   * ref است و نه state: این تصمیم باید حتی بعد از بستنِ شیت (و باز شدنِ دوبارهٔ
+   * آن پس از پایانِ مهلت) پایدار بماند و خواندنش در callbackِ اسکن هم نباید به
+   * رندرِ قبل گیر کند.
+   */
+  const punchFlowRef = useRef(false);
   /**
    * آینهٔ آخرین خطا برای استفادهٔ داخلِ callback.
    *
@@ -209,16 +230,31 @@ export default function DashboardScreen() {
    */
   const punchLocked = presenceLocksPunch(presence);
 
+  /*
+   * تأییدِ حضور ۳۰ ثانیه بیشتر اعتبار ندارد. سرور در پایانِ مهلت آن را
+   * «مصرف‌نشدهٔ منقضی» می‌بیند و ثبت را قفل می‌کند؛ اپ همین را کمی زودتر
+   * نشان می‌دهد: نشانِ «تأیید شده» می‌رود، ثانیه‌ها شمرده می‌شوند و دکمهٔ
+   * اسکن دوباره برمی‌گردد.
+   */
+  const presenceOver = presenceExpired(presence);
+  const presenceLeft = presenceSecondsLeft(presence);
+  const canScan = needsQrScan(presence) || presenceOver;
+
   /**
    * باز کردنِ اسکنر.
    *
    * همان لحظه به پنل خبر می‌دهیم که «کارتِ من را بزرگ نشان بده»: کارمند
    * پشتِ گوشی است و صفحهٔ دفتر شاید ده کارت داشته باشد؛ بدونِ این، باید
-   * کارتِ خودش را بین آن‌ها پیدا کند و کدِ ۳۰ ثانیه‌ای هم تا پیدا کند عوض
-   * می‌شود. این خبر کاملاً اختیاری است — نرسیدنش مانعِ اسکن نیست.
+   * کارتِ خودش را بین آن‌ها پیدا کند و همان چند ثانیه هم صرفِ گشتن می‌شود —
+   * در حالی که بعد از اسکن فقط ۳۰ ثانیه برای زدنِ اثرِ انگشت وقت دارد.
+   * این خبر کاملاً اختیاری است — نرسیدنش مانعِ اسکن نیست.
+   *
+   * `forPunch`: اگر از دکمهٔ ثبت آمده‌ایم، بعد از اسکنِ موفق همان ثبت
+   * خودکار ادامه می‌یابد؛ اسکنِ کارتِ تأیید این کار را نمی‌کند.
    */
-  const openScan = () => {
+  const openScan = (forPunch = false) => {
     setScanNote(null);
+    punchFlowRef.current = forPunch;
     setScanOpen(true);
     spotlightPresence();
   };
@@ -234,6 +270,78 @@ export default function DashboardScreen() {
     setScanOpen(false);
     spotlightPresence(true);
   };
+
+  /**
+   * «مهلتِ همین تأیید تمام شد» — یک رویدادِ لحظه‌ای، نه یک وضعیتِ مشتق از رندر.
+   *
+   * چرا تایمر و نه فقط `presenceExpired` در رندر: نشست خودش ۳۰۰ میلی‌ثانیه بعد
+   * از پایانِ مهلت وضعیت را از سرور تازه می‌کند و آنجا `pending` صفر می‌شود؛
+   * اگر فقط به رندرِ یک‌ثانیه‌ای تکیه کنیم، ممکن است تازه‌سازی زودتر برسد و
+   * رویدادِ «منقضی شد» هیچ‌وقت دیده نشود. تایمر دقیقاً روی همان مهلت می‌نشیند.
+   */
+  const [presenceTimedOut, setPresenceTimedOut] = useState(false);
+
+  useEffect(() => {
+    if (presence.expiresAt == null) {
+      setPresenceTimedOut(false);
+      return;
+    }
+
+    const left = presence.expiresAt - Date.now();
+
+    if (left <= 0) {
+      setPresenceTimedOut(true);
+      return;
+    }
+
+    // تأییدِ تازه = مهلتِ تازه؛ پرچمِ قبلی باید پاک شود.
+    setPresenceTimedOut(false);
+
+    const timer = setTimeout(() => setPresenceTimedOut(true), left + 50);
+    return () => clearTimeout(timer);
+  }, [presence.expiresAt]);
+
+  /**
+   * مهلتی که یک‌بار به‌خاطرش اسکنر را خودمان باز کردیم.
+   *
+   * چرا لازم است: بعد از پایانِ مهلت، پرچمِ بالا تا تازه‌سازیِ بعدی true
+   * می‌ماند؛ بدونِ این نگهبان، هر رندر دوباره شیت را باز می‌کرد و کاربر
+   * نمی‌توانست ببنددش.
+   */
+  const reaskedRef = useRef<number | null>(null);
+
+  /**
+   * ۳۰ ثانیه گذشت و ثبت انجام نشد → دوباره تأییدِ حضور بخواه.
+   *
+   * سناریوی اصلی: کارمند تأیید می‌کند تا خروج بزند، ولی بین اسکن و اثرِ انگشت
+   * وقتش می‌گذرد (تلفن، همکار، پیدا کردنِ جای انگشت). سرور تأیید را دیگر
+   * «آماده» نمی‌بیند و ثبت را با `presence_required` رد می‌کند؛ اپ همان لحظه
+   * شیتِ اسکن را با جملهٔ روشن باز می‌کند تا کارمند بداند باید دوباره تأیید
+   * کند — نه اینکه با دکمهٔ قفل‌شده رها شود.
+   */
+  useEffect(() => {
+    if (!presenceTimedOut || presence.expiresAt == null) {
+      return;
+    }
+
+    if (reaskedRef.current === presence.expiresAt) {
+      return;
+    }
+
+    reaskedRef.current = presence.expiresAt;
+
+    // اگر شیت همین حالا باز است، جملهٔ خطای اسکنش را با این پیام عوض نمی‌کنیم.
+    if (scanOpen) {
+      return;
+    }
+
+    setScanNote(presenceReaskNote(presence));
+    setScanOpen(true);
+    spotlightPresence();
+    // `presence` و `spotlightPresence` عمداً در وابستگی‌ها نیستند؛ تنها
+    // رویدادی که باید این افکند را اجرا کند «گذشتنِ همین مهلت» است.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presenceTimedOut, presence.expiresAt]);
 
   const timerCaption = running
     ? `شیفت از ساعت ${formatClock(today.openSince)} باز است`
@@ -346,21 +454,27 @@ export default function DashboardScreen() {
                     برای ثبتِ بعدی خرج نشده باشد. بعد از هر ثبت (ورود یا خروج)،
                     تأیید مصرف می‌شود و ثبتِ بعدی دوباره اسکن می‌خواهد؛ آنجا نشان
                     خاموش می‌شود و جملهٔ زیرش می‌گوید چه کار کند. */}
-                {presence.pending ? (
+                {presence.pending && !presenceOver ? (
                   <View style={styles.presenceBadge}>
                     <MaterialCommunityIcons name="check-circle-outline" size={14} color={colors.brand} />
-                    <Text style={styles.presenceBadgeLabel}>تأیید شده</Text>
+                    <Text style={styles.presenceBadgeLabel}>
+                      {presenceLeft > 0
+                        ? `تأیید شده · ${toPersianDigits(presenceLeft)} ثانیه`
+                        : 'تأیید شده'}
+                    </Text>
                   </View>
                 ) : null}
               </View>
 
               <Text style={styles.presenceNote}>{presenceNote(presence)}</Text>
 
-              {needsQrScan(presence) ? (
+              {canScan ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="اسکن QR کارت من"
-                  onPress={openScan}
+                  // بدونِ پارامتر: این دکمه فقط تأییدِ حضور می‌خواهد و نباید
+                  // بعد از اسکن خودش ثبت بسازد.
+                  onPress={() => openScan()}
                   style={({ pressed }) => [styles.presenceButton, pressed && styles.pressedSoft]}
                 >
                   <MaterialCommunityIcons name="qrcode-scan" size={18} color={colors.white} />
@@ -432,8 +546,22 @@ export default function DashboardScreen() {
           const ok = await confirmPresence(code);
 
           if (ok) {
+            // اگر اسکن برای ثبت بود، همان ثبت را ادامه بده: ادعای «۳۰ ثانیه
+            // فرصت» وقتی معنی دارد که اثرِ انگشت بلافاصله پرسیده شود، نه
+            // اینکه کارمند یادش برود دوباره دکمه را بزند و مهلت بسوزد.
+            //
+            // مهلتِ کوتاه پیش از پرسش، برای بسته شدنِ کاملِ شیتِ دوربین است؛
+            // روی iOS باز کردنِ اثرِ انگشت روی مودالِ در حالِ بسته شدن شکست
+            // می‌خورد.
+            const resumePunch = punchFlowRef.current;
+
             setScanNote(null);
             closeScan();
+
+            if (resumePunch) {
+              setTimeout(() => void punch({ presenceJustConfirmed: true }), 350);
+            }
+
             return true;
           }
 
@@ -466,7 +594,7 @@ export default function DashboardScreen() {
         <PunchButton
           label={punchLocked ? 'تأیید حضور با QR' : PUNCH_LABEL[today.nextIntent]}
           tone={today.nextIntent}
-          onPress={() => (punchLocked ? openScan() : void punch())}
+          onPress={() => (punchLocked ? openScan(true) : void punch())}
           loading={busy}
         />
 

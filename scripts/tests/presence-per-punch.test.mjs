@@ -127,3 +127,105 @@ test('اپ به lock سرور تکیه می‌کند، نه به confirmedِ ر�
   assert.ok(scan, 'needsQrScan باید باشد');
   assert.match(scan[0], /return state\.lock;/, 'تنها معیارِ اسکن باید lock باشد');
 });
+
+test('تأییدِ آماده ۳۰ ثانیه بیشتر اعتبار ندارد', () => {
+  const presence = read('../../app/MobilePresence.php');
+  const config = read('../../config/services.php');
+  const app = read('../../mobile/src/lib/presence.ts');
+  const session = read('../../mobile/src/session.tsx');
+
+  assert.match(
+    config,
+    /'punch_window' => env\('MOBILE_QR_PUNCH_WINDOW', 30\)/,
+    'مهلت باید از env خوانده شود و پیش‌فرضش ۳۰ ثانیه باشد',
+  );
+
+  assert.match(presence, /const PUNCH_WINDOW_SECONDS = 30;/, 'پیش‌فرضِ ۳۰ ثانیه در خودِ کلاس هم باشد');
+
+  const pending = /private static function pendingRow[\s\S]*?\n    }/.exec(presence);
+
+  assert.ok(pending, 'pendingRow باید باشد');
+  assert.match(
+    pending[0],
+    /where\('confirmed_at', '>=', \$cutoff\)/,
+    'جست‌وجوی «تأییدِ آماده» باید ردیفِ کهنه‌تر از مهلت را کنار بگذارد',
+  );
+
+  // اپ باید مهلت را بشمارد و در پایانش وضعیت را از سرور تازه کند؛ وگرنه دکمهٔ
+  // باز، ضربه‌ای می‌گیرد که سرور با ۴۰۳ ردش می‌کند.
+  assert.match(app, /export function presenceExpired/, 'اپ باید «منقضی شد» را بشناسد');
+  assert.match(
+    app,
+    /export function presenceLocksPunch[\s\S]{0,300}presenceExpired/,
+    'قفلِ دکمه باید مهلت را هم در نظر بگیرد',
+  );
+  assert.match(
+    session,
+    /presence\.expiresAt[\s\S]{0,400}refreshToday/,
+    'در پایانِ مهلت، وضعیت باید از سرور تازه شود',
+  );
+});
+
+test('بعد از تأیید، همان ثبت ادامه می‌یابد تا مهلت نسوزد', () => {
+  const dashboard = read('../../mobile/src/screens/DashboardScreen.tsx');
+  const session = read('../../mobile/src/session.tsx');
+
+  assert.match(
+    session,
+    /punch\(options\?: \{ presenceJustConfirmed\?: boolean \}\)/,
+    'ثبت باید گزینهٔ «تأیید همین لحظه» را بپذیرد',
+  );
+  assert.match(
+    session,
+    /!options\?\.presenceJustConfirmed && presenceLocksPunch\(presence\)/,
+    'در مسیرِ اسکنِ تازه، قفلِ محلی نباید ثبت را رد کند (سرور می‌سنجد)',
+  );
+  assert.match(
+    dashboard,
+    /setTimeout\(\(\) => void punch\(\{ presenceJustConfirmed: true \}\), 350\)/,
+    'داشبورد باید بعد از اسکنِ موفق خودش ثبت را ادامه بدهد',
+  );
+  assert.match(
+    dashboard,
+    /onPress=\{\(\) => \(punchLocked \? openScan\(true\) : void punch\(\)\)\}/,
+    'اسکنی که از دکمهٔ ثبت باز می‌شود باید «برای ثبت» علامت بخورد',
+  );
+  assert.match(
+    dashboard,
+    /onPress=\{\(\) => openScan\(\)\}/,
+    'دکمهٔ کارتِ تأیید نباید بعد از اسکن ثبت بسازد',
+  );
+});
+
+test('مهلت که تمام شد، اپ خودش دوباره تأییدِ حضور می‌خواهد', () => {
+  const app = read('../../mobile/src/lib/presence.ts');
+  const dashboard = read('../../mobile/src/screens/DashboardScreen.tsx');
+
+  assert.match(app, /export function presenceReaskNote\(/, 'جملهٔ «دوباره تأیید کن» باید یک جا باشد');
+  assert.match(
+    app,
+    /state\.intent === 'pause'[\s\S]{0,200}خروج ثبت نشد/,
+    'برای نوبتِ خروج، جمله باید بگوید خودِ خروج ثبت نشده',
+  );
+
+  // رویدادِ «مهلت تمام شد» باید روی تایمر بنشیند، نه فقط رندرِ ثانیه‌ای: نشست
+  // خودش کمی بعد از مهلت وضعیت را تازه می‌کند و آن‌وقت دیگر «منقضی» دیده نمی‌شود.
+  assert.match(
+    dashboard,
+    /setTimeout\(\(\) => setPresenceTimedOut\(true\), left \+ 50\)/,
+    'پایانِ مهلت باید یک رویدادِ زمان‌بندی‌شدهٔ مستقل باشد',
+  );
+
+  const effect = /if \(!presenceTimedOut \|\| presence\.expiresAt == null\)[\s\S]*?\n  \}, \[presenceTimedOut, presence\.expiresAt\]\);/.exec(
+    dashboard,
+  );
+
+  assert.ok(effect, 'افکندِ «مهلت تمام شد» باید در داشبورد باشد');
+  assert.match(effect[0], /setScanOpen\(true\)/, 'شیتِ اسکن باید خودش باز شود');
+  assert.match(effect[0], /presenceReaskNote\(presence\)/, 'دلیلِ باز شدن باید گفته شود');
+  assert.match(
+    effect[0],
+    /reaskedRef\.current === presence\.expiresAt/,
+    'یک مهلت نباید چندبار شیت را باز کند (وگرنه بستنش ممکن نیست)',
+  );
+});

@@ -34,6 +34,11 @@ use Illuminate\Support\Facades\DB;
 | بستنِ شیفت هم قبلش تأییدِ تازه می‌خواهد — کارمند پشتِ گوشی است و باید در
 | برابرِ کارتِ خودش اسکن کند، همان‌طور که برای ورود می‌کند.
 |
+| تأیید **مدت‌دار** است: پیش‌فرض ۳۰ ثانیه (`punchWindow`). اگر کارمند تا آن
+| لحظه اثرِ انگشت را نزند، تأیید خودش منقضی می‌شود و باید دوباره اسکن کند؛
+| وگرنه یک اسکنِ صبح تا شب درِ ثبت را باز می‌گذاشت. «منقضی» ردیف را پاک
+| نمی‌کند، فقط از جست‌وجوی «آماده» بیرون می‌رود تا سابقهٔ تأییدها بمانَد.
+|
 | چرا عکسِ QR بی‌فایده است: کد به «پنجرهٔ زمانی» گره خورده و با هر پنجره عوض
 | می‌شود؛ عکسِ گرفته‌شده و واتساپ‌شده در پنجرهٔ بعد اعتبار ندارد. سرور فقط
 | پنجرهٔ جاری و پنجرهٔ قبلی را می‌پذیرد (پنجرهٔ قبلی برای این است که اگر کد
@@ -68,6 +73,18 @@ class MobilePresence
     /** چند کاراکتر از MAC در کد می‌آید (۱۶ کاراکتر = ۶۴ بیت). */
     const MAC_LENGTH = 16;
 
+    /**
+     * چند ثانیه تأییدِ تازه معتبر می‌ماند (پیش‌فرض؛ با
+     * `MOBILE_QR_PUNCH_WINDOW` عوض می‌شود).
+     *
+     * چرا مدت‌دار: تأیید فقط می‌گوید «همین حالا در برابرِ کارت بودم». اگر
+     * بی‌مدت بماند، یک اسکنِ صبح تا شب درٍ ثبت را باز می‌گذارد و همان چیزی
+     * می‌شود که این مکانیسم می‌خواست جلویش را بگیرد. سی ثانیه کافی است تا
+     * کارمند دوربین را ببندد و اثرِ انگشت بزند، و کوتاه‌تر از آن دوباره
+     * اسکن می‌خواهد.
+     */
+    const PUNCH_WINDOW_SECONDS = 30;
+
     /** روش‌های ثبتِ تأیید. */
     const METHOD_QR = 'qr';
     const METHOD_MANUAL = 'manual';
@@ -100,6 +117,55 @@ class MobilePresence
         }
 
         return filter_var(config('services.mobile.qr.required', true), FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * چند ثانیه یک تأیید معتبر است؟ (۰ = بدونِ انقضا)
+     *
+     * این عدد هم قفلِ سرور را می‌سازد و هم در `state()` به اپ می‌رود تا
+     * کارمند بشمارد که چقدر وقت دارد.
+     */
+    public static function punchWindow()
+    {
+        $seconds = (int) config('services.mobile.qr.punch_window', self::PUNCH_WINDOW_SECONDS);
+
+        return $seconds > 0 ? $seconds : 0;
+    }
+
+    /** لحظهٔ آخرین ثانیه‌ای که تأییدی که در `$at` نوشته شده هنوز معتبر است. */
+    private static function windowStart($now = null)
+    {
+        $window = self::punchWindow();
+
+        if ($window === 0) {
+            return null;
+        }
+
+        return date('Y-m-d H:i:s', ($now === null ? time() : (int) $now) - $window);
+    }
+
+    /**
+     * چند ثانیه از عمرِ یک ردیفِ تأیید باقی مانده؟ (۰ = گذشته یا بدونِ انقضا)
+     *
+     * @param object $row
+     */
+    public static function remaining($row, $now = null)
+    {
+        $window = self::punchWindow();
+
+        if ($window === 0 || empty($row) || empty($row->confirmed_at)) {
+            return 0;
+        }
+
+        $written = strtotime((string) $row->confirmed_at);
+
+        if ($written === false) {
+            return 0;
+        }
+
+        $left = $written + $window - ($now === null ? time() : (int) $now);
+
+        return $left > 0 ? $left : 0;
     }
 
     /** روکشِ امضا؛ تنها جای محاسبهٔ MAC. */
@@ -291,15 +357,26 @@ class MobilePresence
      * نشده». خطای دیتابیس عمداً اینجا خفه نمی‌شود: `pending()` باید بتواند
      * «ردیفی نیست» را از «جدول نیست/migration اجرا نشده» جدا کند، وگرنه با
      * اجرا نشدنِ migration همه پشتِ در می‌ماندند.
+     *
+     * `confirmed_at` هم شرط دارد: تأییدی که از پنجرهٔ ۳۰ ثانیه‌ای گذشته دیگر
+     * «آماده» نیست، حتی اگر مصرف نشده باشد. در خودِ کوئری است و نه در PHP تا
+     * هم `pending()` و هم `consume()` همان قاعده را ببینند (تأییدِ منقضی
+     * مصرف هم نمی‌شود).
      */
-    private static function pendingRow($customerId, $dmy)
+    private static function pendingRow($customerId, $dmy, $now = null)
     {
-        return DB::table('tbl_mobile_presence_confirm')
+        $query = DB::table('tbl_mobile_presence_confirm')
             ->where('customer_id', (int) $customerId)
             ->where('dmy', $dmy)
-            ->whereNull('consumed_at')
-            ->orderBy('id', 'desc')
-            ->first();
+            ->whereNull('consumed_at');
+
+        $cutoff = self::windowStart($now);
+
+        if ($cutoff !== null) {
+            $query = $query->where('confirmed_at', '>=', $cutoff);
+        }
+
+        return $query->orderBy('id', 'desc')->first();
     }
 
     /**
@@ -311,10 +388,10 @@ class MobilePresence
      *
      * @return bool|null
      */
-    public static function pending($customerId, $dmy)
+    public static function pending($customerId, $dmy, $now = null)
     {
         try {
-            return ! empty(self::pendingRow($customerId, $dmy));
+            return ! empty(self::pendingRow($customerId, $dmy, $now));
         } catch (\Throwable $e) {
             return null;
         }
@@ -427,9 +504,13 @@ class MobilePresence
      *
      * سه معنیِ نزدیک که قاطی‌کردنشان کارمند را سردرگم می‌کند:
      *   confirmed  → امروز اصلاً تأییدی گرفته شده؟ (نشانِ «تأیید شده»)
-     *   pending    → تأییدی هست که هنوز برای ثبتی خرج نشده؟ (همان که در را باز می‌کند)
-     *   lock       → همین حالا این ثبت قفل است؟ (بدونِ تأییدِ مصرف‌نشده قفل است،
-     *                چه نوبت ورود باشد چه خروج — این تنها معیارِ UI است)
+     *   pending    → تأییدی هست که هنوز برای ثبتی خرج نشده **و منقضی نشده**؟
+     *                (همان که در را باز می‌کند)
+     *   lock       → همین حالا این ثبت قفل است؟ (بدونِ تأییدِ تازه و معتبر قفل
+     *                است، چه نوبت ورود باشد چه خروج — تنها معیارِ UI)
+     *   seconds_left → چند ثانیه از عمرِ همان تأیید باقی است. صفر یعنی تأییدی
+     *                برای استفاده نیست (یا گذشت)؛ اپ با همین می‌شمارد و بعد
+     *                دوباره قفل را از سرور می‌خواند.
      *
      * @param string $intent کاری که در نوبت است: `start` یا `pause`
      * @return array{required:bool, enabled:bool, confirmed:bool, pending:bool, lock:bool, intent:string, method:string|null, confirmed_at:string|null, seconds_left:int}
@@ -437,7 +518,17 @@ class MobilePresence
     public static function state($customerId, $dmy, $now = null, $intent = 'start')
     {
         $row = self::today($customerId, $dmy);
-        $pending = self::pending($customerId, $dmy) === true;
+        $pending = self::pending($customerId, $dmy, $now) === true;
+        $secondsLeft = 0;
+
+        if ($pending) {
+            try {
+                $secondsLeft = self::remaining(self::pendingRow($customerId, $dmy, $now), $now);
+            } catch (\Throwable $e) {
+                // نمایشِ بدونِ شمارنده بهتر از شکستنِ کلِ وضعیت است.
+                $secondsLeft = 0;
+            }
+        }
 
         return [
             'required' => self::required(),
@@ -450,9 +541,10 @@ class MobilePresence
             'intent' => $intent === 'pause' ? 'pause' : 'start',
             'method' => empty($row) ? null : (string) $row->method,
             'confirmed_at' => empty($row) ? null : (string) $row->confirmed_at,
-            // کد ثابت است و منقضی نمی‌شود؛ کلید فقط برای سازگاریِ اپِ
-            // نصب‌شده مانده تا پاسخش بی‌تغییر بماند.
-            'seconds_left' => 0,
+            // عمرِ باقی‌ماندهٔ تأییدِ آماده (نه کد؛ کد ثابت است). صفر یعنی
+            // تأییدی برای خرج‌شدن نیست. اپ با همین می‌شمارد و در پایانش
+            // وضعیت را تازه می‌کند تا دکمه دوباره قفل شود.
+            'seconds_left' => $secondsLeft,
         ];
     }
 }

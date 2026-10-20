@@ -8,9 +8,12 @@ import {
   localCodeProblem,
   looksLikeCode,
   needsQrScan,
+  presenceExpired,
   presenceLocksPunch,
   presenceNote,
   presenceOf,
+  presenceReaskNote,
+  presenceSecondsLeft,
 } from '../presence.ts';
 
 /** کدِ نمونه، همان قالبی که سرور می‌سازد: `v1.<کارمند>.<پنجره>.<۱۶ کاراکتر>`. */
@@ -159,7 +162,7 @@ test('جملهٔ کارت با وضعیتِ واقعی می‌خواند', () =>
  * نه، یا کارمند درخواستِ محکوم‌به‌شکست می‌فرستد یا دکمه بی‌دلیل قفل می‌ماند.
  */
 test('تا تأییدِ همین ثبت، دکمهٔ ثبت قفل است', () => {
-  const base = { enabled: true, required: true, confirmed: false, pending: false, lock: true, intent: 'start' as const, method: null, confirmedAt: null, secondsLeft: 20 };
+  const base = { enabled: true, required: true, confirmed: false, pending: false, lock: true, intent: 'start' as const, method: null, confirmedAt: null, secondsLeft: 20, expiresAt: null };
 
   assert.equal(presenceLocksPunch(base), true);
   assert.equal(presenceLocksPunch({ ...base, pending: true, lock: false }), false, 'تأییدِ تازه قفل را باز می‌کند');
@@ -175,7 +178,7 @@ test('جملهٔ قفل «چه کنم» را می‌گوید، نه فقط «ن�
 });
 
 test('جملهٔ کارتِ تأییدنشده به اجباری‌بودن حساس است', () => {
-  const base = { enabled: true, required: true, confirmed: false, pending: false, lock: true, intent: 'start' as const, method: null, confirmedAt: null, secondsLeft: 20 };
+  const base = { enabled: true, required: true, confirmed: false, pending: false, lock: true, intent: 'start' as const, method: null, confirmedAt: null, secondsLeft: 20, expiresAt: null };
 
   // اجباری: صریح می‌گوید «هر ثبتِ تازه تأیید می‌خواهد» تا کاربر بداند
   // چرا دوباره اسکن می‌خواهد، نه اینکه فکر کند اپ گیر کرده.
@@ -185,4 +188,73 @@ test('جملهٔ کارتِ تأییدنشده به اجباری‌بودن حس
   const optional = presenceNote({ ...base, required: false });
   assert.match(optional, /اسکن/);
   assert.doesNotMatch(optional, /هر ثبتِ تازه/);
+});
+
+/*
+ * مهلتِ تأیید — ۳۰ ثانیه از لحظهٔ اسکن.
+ *
+ * قاعده‌ای که سرور اجرا می‌کند (`MobilePresence::punchWindow`): تأیید فقط
+ * می‌گوید «همین حالا در برابرِ کارت بودم». اگر اپ این مهلت را نداند، دکمه
+ * بعد از نیم دقیقه باز می‌ماند و کارمند ضربه‌ای می‌زند که سرور ردش می‌کند؛
+ * اگر بداند، همان لحظه دوباره اسکن می‌خواهد.
+ */
+test('تأییدِ آماده مهلت می‌گیرد و شمارش از همان لحظهٔ پاسخ شروع می‌شود', () => {
+  const now = 1_700_000_000_000;
+  const state = presenceOf(
+    { required: true, enabled: true, confirmed: true, pending: true, lock: false, intent: 'start', seconds_left: 30 },
+    now,
+  );
+
+  assert.equal(state.expiresAt, now + 30_000, 'مهلت باید از ثانیه‌های سرور ساخته شود');
+  assert.equal(presenceSecondsLeft(state, now), 30);
+  assert.equal(presenceSecondsLeft(state, now + 10_000), 20);
+  assert.equal(presenceSecondsLeft(state, now + 30_000), 0);
+  assert.equal(presenceExpired(state, now + 29_999), false);
+  assert.equal(presenceExpired(state, now + 30_000), true, 'در پایانِ مهلت منقضی است');
+});
+
+test('تأییدِ منقضی دوباره قفل است، حتی اگر سرور هنوز lock=false داده باشد', () => {
+  const now = 1_700_000_000_000;
+  const fresh = presenceOf(
+    { required: true, enabled: true, confirmed: true, pending: true, lock: false, intent: 'start', seconds_left: 30 },
+    now,
+  );
+
+  assert.equal(presenceLocksPunch(fresh, now + 5_000), false, 'در مهلت، دکمه باز است');
+  assert.equal(presenceLocksPunch(fresh, now + 31_000), true, 'بعد از مهلت، دکمه قفل است');
+  assert.match(presenceNote(fresh, now + 31_000), /دوباره QR/, 'جمله باید بگوید دوباره اسکن کن');
+});
+
+/*
+ * «مهلت که گذشت، خودت دوباره بپرس» — خواستهٔ اصلیِ جریانِ خروج.
+ *
+ * کارمندی که برای خروج تأیید می‌کند فقط ۳۰ ثانیه وقت دارد؛ اگر اثرِ انگشت
+ * را نزند، سرور ثبت را رد می‌کند. جمله باید کارِ بعدی را بگوید (دوباره اسکن،
+ * بعد اثرِ انگشت) و برای خروج صریح باشد — نه یک «خطا داد»ِ گنگ.
+ */
+test('جملهٔ «مهلت تمام شد» کارِ بعدی را می‌گوید و برای خروج صریح است', () => {
+  const base = { enabled: true, required: true, confirmed: true, pending: true, lock: false, intent: 'pause' as const, method: 'qr' as const, confirmedAt: null, secondsLeft: 30, expiresAt: null };
+
+  const checkout = presenceReaskNote(base);
+
+  assert.match(checkout, /خروج ثبت نشد/, 'برای خروج باید بگوید خودِ خروج ثبت نشد');
+  assert.match(checkout, /QR/, 'راهِ حل باید گفته شود: اسکنِ دوباره');
+  assert.match(checkout, /۳۰/, 'مهلت باید ذکر شود تا کارمند بداند چرا تمام شد');
+
+  const entry = presenceReaskNote({ ...base, intent: 'start' });
+
+  assert.doesNotMatch(entry, /خروج ثبت نشد/, 'جملهٔ ورود نباید از خروج حرف بزند');
+  assert.match(entry, /ثبت انجام نشد/);
+});
+
+test('تأییدِ مصرف‌شده یا قدیمی مهلت نمی‌سازد (و NaN به UI نمی‌دهد)', () => {
+  const consumed = presenceOf({ required: true, enabled: true, confirmed: true, pending: false, lock: true, intent: 'start', seconds_left: 0 });
+
+  assert.equal(consumed.expiresAt, null);
+  assert.equal(presenceSecondsLeft(consumed), 0);
+  assert.equal(presenceExpired(consumed), false, 'تأییدی نیست، پس «منقضی» هم معنی ندارد');
+
+  const legacy = presenceOf({ required: true, enabled: true, confirmed: true, pending: true, lock: false });
+  assert.equal(legacy.expiresAt, null, 'سرورِ قدیمی اعداد نمی‌فرستد؛ نباید مهلتِ ساختگی بسازیم');
+  assert.equal(presenceSecondsLeft(legacy), 0);
 });

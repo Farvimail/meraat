@@ -21,6 +21,17 @@
  * `pending` را false برمی‌گرداند؛ پس هر بار که نوبتِ بعدیِ ثبت فرا برسد (چه
  * برای ورود چه برای خروج) یک اسکنِ تازه لازم است. این تصمیم را خودِ سرور در
  * فیلدِ `lock` می‌فرستد و اپ فقط همان را نشان می‌دهد.
+ *
+ * **تأیید مدت‌دار است (پیش‌فرض ۳۰ ثانیه):** `seconds_left` عمرِ باقی‌ماندهٔ
+ * همان تأییدِ آماده است. اپ از آن یک مهلتِ محلی می‌سازد، ثانیه‌ها را نشان
+ * می‌دهد و در پایان مهلت وضعیت را از سرور تازه می‌کند تا دکمه دوباره قفل شود
+ * (سرور مستقل همین را enforce می‌کند، پس ساعتِ گوشی مرجع نیست).
+ *
+ * **مهلت که گذشت، خودِ اپ دوباره می‌پرسد:** اگر کارمند پیش از پایانِ ۳۰ ثانیه
+ * اثرِ انگشت را نزند (مثلاً می‌خواست خروج بزند و وقت کم آورد)، تأیید می‌سوزد
+ * و ثبت دوباره قفل می‌شود. صفحهٔ داشبورد همان لحظه شیتِ اسکن را با جملهٔ
+ * «خروج ثبت نشد، دوباره تأیید کن» باز می‌کند (`presenceReaskNote`) تا کارمند
+ * دنبالِ دکمه‌ای نگردد که چرا کار نمی‌کند.
  */
 
 /** روشِ ثبتِ تأیید، همان چیزی که سرور می‌فرستد. */
@@ -51,12 +62,32 @@ export interface PresenceState {
   method: PresenceMethod | null;
   /** زمانِ تأیید، همان‌طور که سرور نوشته است. */
   confirmedAt: string | null;
-  /** ثانیه‌های باقی‌مانده تا کدِ روی صفحه عوض شود. */
+  /**
+   * ثانیه‌های باقی‌ماندهٔ تأییدِ آماده (نه کد؛ کد ثابت است).
+   *
+   * صفر یعنی تأییدی برای خرج‌شدن نیست یا عمرش تمام شده است.
+   */
   secondsLeft: number;
+  /**
+   * مهلتِ محلیِ همان تأیید (میلی‌ثانیهٔ `Date.now`)، یا `null`.
+   *
+   * از `seconds_left` و لحظهٔ رسیدنِ پاسخ ساخته می‌شود تا شمارشِ اپ به ساعتِ
+   * گوشی وابسته نباشد، بلکه به همان عددی که سرور داده. `null`/نبود یعنی
+   * مهلتی برای شمردن نیست (تأییدِ مصرف‌شده، یا سرورِ قدیمی).
+   */
+  expiresAt?: number | null;
 }
 
 /** نوعِ ثبتی که در نوبت است: ورودِ تازه یا بستنِ شیفت. */
 export type PresenceIntent = 'start' | 'pause';
+
+/**
+ * مهلتِ تأیید به ثانیه — همان پیش‌فرضِ سرور (`MOBILE_QR_PUNCH_WINDOW`).
+ *
+ * فقط برای نوشتنِ جمله‌ها استفاده می‌شود؛ عددِ واقعی همیشه از `seconds_left`
+ * می‌آید تا اگر مدیر روی سرور عوضش کرد، اپ همان را بشمارد.
+ */
+export const PRESENCE_WINDOW_SECONDS = 30;
 /**
  * حالتِ پیش‌فرض: هیچ تأییدی لازم نیست.
  *
@@ -73,6 +104,7 @@ export const NO_PRESENCE: PresenceState = {
   method: null,
   confirmedAt: null,
   secondsLeft: 0,
+  expiresAt: null,
 };
 
 /**
@@ -84,7 +116,7 @@ export const NO_PRESENCE: PresenceState = {
 const CODE_PATTERN = /^v1\.(\d+)\.(\d+)\.([0-9a-f]{16})$/;
 
 /** پاسخِ سرور (که ممکن است ناقص/قدیمی باشد) → حالتِ امن برای UI. */
-export function presenceOf(value: unknown): PresenceState {
+export function presenceOf(value: unknown, now: number = Date.now()): PresenceState {
   if (!value || typeof value !== 'object') {
     return NO_PRESENCE;
   }
@@ -101,6 +133,8 @@ export function presenceOf(value: unknown): PresenceState {
   const pending = typeof raw.pending === 'boolean' ? raw.pending : confirmed;
   const lock =
     typeof raw.lock === 'boolean' ? raw.lock : required && enabled && !confirmed;
+  const left = Number.isFinite(secondsLeft) ? Math.max(0, Math.round(secondsLeft)) : 0;
+
   return {
     required,
     enabled,
@@ -110,8 +144,44 @@ export function presenceOf(value: unknown): PresenceState {
     intent: raw.intent === 'pause' ? 'pause' : 'start',
     method,
     confirmedAt: typeof raw.confirmed_at === 'string' ? raw.confirmed_at : null,
-    secondsLeft: Number.isFinite(secondsLeft) ? Math.max(0, Math.round(secondsLeft)) : 0,
+    secondsLeft: left,
+    // فقط وقتی تأییدی هست که ارزشِ شمردن داشته باشد.
+    expiresAt: pending && left > 0 ? now + left * 1000 : null,
   };
+}
+
+/**
+ * چند ثانیه از تأییدِ آماده باقی مانده؟ (۰ = تأییدِ قابل‌استفاده‌ای نیست)
+ *
+ * روی مهلتِ محلی حساب می‌شود؛ اگر سرور `seconds_left` نفرستد (نسخهٔ قدیمی)
+ * صفر برمی‌گردد و UI فقط همان «تأیید شده» را نشان می‌دهد.
+ */
+export function presenceSecondsLeft(
+  state: PresenceState | null | undefined,
+  at: number = Date.now(),
+): number {
+  if (!state || !state.pending || state.expiresAt == null) {
+    return 0;
+  }
+
+  return Math.max(0, Math.ceil((state.expiresAt - at) / 1000));
+}
+
+/**
+ * عمرِ تأییدِ آماده تمام شده است؟
+ *
+ * «تمام شده» یعنی باید دوباره اسکن کند؛ صدازدنِ دوبارهٔ `today` هم قفل را از
+ * سرور می‌گیرد، ولی تا آمدنِ پاسخ این تابع جلوی ثبتِ بی‌فایده را می‌گیرد.
+ */
+export function presenceExpired(
+  state: PresenceState | null | undefined,
+  at: number = Date.now(),
+): boolean {
+  if (!state || !state.pending || state.expiresAt == null) {
+    return false;
+  }
+
+  return at >= state.expiresAt;
 }
 
 /**
@@ -138,8 +208,13 @@ export function needsQrScan(state: PresenceState | null | undefined): boolean {
  * همان شرطی که سرور در `MobilePresence::blocksPunch` می‌سنجد: وقتی سرور قفل
  * می‌کند، اپ هم همان لحظه قفل نشان می‌دهد تا کاربر درخواستِ بی‌فایده نزند.
  */
-export function presenceLocksPunch(state: PresenceState | null | undefined): boolean {
-  return needsQrScan(state);
+export function presenceLocksPunch(
+  state: PresenceState | null | undefined,
+  at: number = Date.now(),
+): boolean {
+  // تأییدِ منقضی هم قفل است، حتی اگر سرور هنوز نگفته باشد: `lock` فقط در
+  // لحظهٔ پاسخ محاسبه شده و مهلت بعدش می‌گذرد.
+  return needsQrScan(state) || presenceExpired(state, at);
 }
 
 /** جملهٔ زیرِ دکمهٔ ثبت وقتی قفل است — «چرا کار نمی‌کند و چه کنم». */
@@ -147,9 +222,15 @@ export const PUNCH_LOCK_NOTE =
   'برای هر ثبت (ورود یا خروج) باید اول حضور را تأیید کنید. با دکمهٔ زیر QR کارتِ خودت را در صفحهٔ حضور و غیاب اسکن کن؛ بعد اثرِ انگشت بزنید.';
 
 /** جملهٔ کارتِ تأیید — «چه چیزی از من می‌خواهی و چرا». */
-export function presenceNote(state: PresenceState): string {
+export function presenceNote(state: PresenceState, at: number = Date.now()): string {
   if (!state.enabled) {
     return '';
+  }
+
+  if (state.pending && presenceExpired(state, at)) {
+    // مهم‌ترین جملهٔ این کارت: کارمند باید بفهمد چرا دکمه‌ای که همین حالا باز
+    // بود دوباره بسته شد — «کارت را دوباره اسکن کن»، نه «خطا داد».
+    return presenceReaskNote(state);
   }
 
   if (state.pending) {
@@ -168,6 +249,27 @@ export function presenceNote(state: PresenceState): string {
   return state.required
     ? 'هر ثبتِ تازه (ورود یا خروج) یک تأییدِ تازه لازم دارد. QR کارتِ خودت را در صفحهٔ حضور و غیاب با دوربینِ همین اپ اسکن کن تا ثبت باز شود؛ بعد اثرِ انگشت بزن.'
     : 'برای تأییدِ حضور، QR کارتِ خودت را در صفحهٔ حضور و غیاب با دوربینِ همین اپ اسکن کن.';
+}
+
+/**
+ * جملهٔ «مهلت تمام شد» — هم زیرِ کارتِ تأیید می‌نشیند و هم داخلِ شیتِ اسکن
+ * که اپ خودش باز می‌کند.
+ *
+ * چرا نوبت در جمله می‌آید: کارمندی که می‌خواست خروج بزند باید بداند **خروج**
+ * ثبت نشده و همان کار را ادامه بدهد؛ جملهٔ کلیِ «ثبت انجام نشد» او را وادار
+ * می‌کند فکر کند ورودش هم مشکل دارد.
+ */
+export function presenceReaskNote(state: PresenceState): string {
+  // رقمِ مهلت فارسی نوشته می‌شود تا با بقیهٔ جمله‌ها یک‌دست باشد؛ این فایل
+  // عمداً import ندارد، پس تبدیل همین‌جا انجام می‌شود.
+  const seconds = String(PRESENCE_WINDOW_SECONDS).replace(
+    /\d/g,
+    (digit) => '۰۱۲۳۴۵۶۷۸۹'[Number(digit)],
+  );
+
+  return state.intent === 'pause'
+    ? `زمانِ تأیید (${seconds} ثانیه) تمام شد و خروج ثبت نشد؛ برای ثبتِ خروج دوباره QR کارتِ خودت را اسکن کن، بعد اثرِ انگشت بزن.`
+    : `زمانِ تأیید (${seconds} ثانیه) تمام شد و ثبت انجام نشد؛ دوباره QR کارتِ خودت را اسکن کن، بعد اثرِ انگشت بزن.`;
 }
 
 /** رشتهٔ خوانده‌شده قالبِ کدِ سرور را دارد؟ (پیش از زدن به شبکه) */

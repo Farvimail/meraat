@@ -81,13 +81,25 @@ namespace Illuminate\Support\Facades {
         /** آیا `whereNull('consumed_at')` صدا زده شده؟ */
         private $pendingOnly = false;
 
+        /**
+         * مهلتِ تأیید: `where('confirmed_at', '>=', …)`.
+         *
+         * جعلیِ کمینه باید همین شرط را بفهمد، وگرنه تستِ «تأییدِ ۳۰ ثانیه‌ای»
+         * همیشه سبز می‌ماند حتی وقتی کد انقضا را کامل حذف کرده باشد.
+         */
+        private $confirmedSince = null;
+
         public function __construct($table)
         {
             $this->table = $table;
         }
 
-        public function where($column, $value = null)
+        public function where($column, $value = null, $operator = null)
         {
+            if ($column === 'confirmed_at' && $value === '>=' && $operator !== null) {
+                $this->confirmedSince = (string) $operator;
+            }
+
             return $this;
         }
 
@@ -110,6 +122,16 @@ namespace Illuminate\Support\Facades {
             if ($this->pendingOnly && DB::$presenceRow && ! empty(DB::$presenceRow->consumed_at)) {
                 // ردیفِ مصرف‌شده «تأییدِ آماده» نیست؛ همان اشتباهی که یک تأیید
                 // را به کلِ روز گره می‌زد.
+                return null;
+            }
+
+            // مقایسهٔ رشته‌ای کافی است: هر دو طرف `Y-m-d H:i:s` هستند.
+            if (
+                $this->confirmedSince !== null
+                && DB::$presenceRow
+                && strcmp((string) DB::$presenceRow->confirmed_at, $this->confirmedSince) < 0
+            ) {
+                // تأییدِ کهنه‌تر از مهلت، «آماده» نیست.
                 return null;
             }
 
@@ -143,6 +165,7 @@ namespace {
     $GLOBALS['presence_config'] = [
         'services.mobile.qr.key' => 'test-key-0123456789abcdef',
         'services.mobile.qr.required' => true,
+        'services.mobile.qr.punch_window' => 30,
     ];
 
     function config($key, $default = null)
@@ -272,8 +295,14 @@ namespace {
     // یک تأییدِ صبح نباید ورودِ عصر را باز کند. همین می‌شود همان باگی که
     // کاربر گزارش داد: یک اسکن، تمامِ روز ثبت را آزاد می‌گذاشت.
     $dmy = '17102026';
-    $pendingRow = (object) ['id' => 7, 'method' => 'qr', 'confirmed_at' => '2026-10-17 08:05:00', 'consumed_at' => null];
-    $usedRow = (object) ['id' => 7, 'method' => 'qr', 'confirmed_at' => '2026-10-17 08:05:00', 'consumed_at' => '2026-10-17 08:06:00'];
+
+    // زمانِ ردیف‌ها **پویا** است: از وقتی تأیید ۳۰ ثانیه اعتبار دارد، یک
+    // تاریخِ ثابت در گذشته خودش «منقضی» است و تست‌های «تأیید آماده است» را
+    // به اشتباه قرمز می‌کرد. حالتِ منقضی جداگانه و عمداً با تاریخِ کهنه ساخته
+    // می‌شود (پایین‌تر).
+    $freshAt = date('Y-m-d H:i:s');
+    $pendingRow = (object) ['id' => 7, 'method' => 'qr', 'confirmed_at' => $freshAt, 'consumed_at' => null];
+    $usedRow = (object) ['id' => 7, 'method' => 'qr', 'confirmed_at' => $freshAt, 'consumed_at' => $freshAt];
 
     $GLOBALS['presence_config']['services.mobile.qr.required'] = true;
     DB::reset();
@@ -309,7 +338,9 @@ namespace {
     );
 
     // تأییدِ دستیِ مدیر هم همان ردیف را می‌نویسد، پس همان قفل را باز می‌کند.
-    DB::$presenceRow = (object) ['id' => 8, 'method' => 'manual', 'confirmed_at' => '2026-10-17 08:30:00', 'consumed_at' => null];
+    // تاریخِ پویا: تأییدِ دستی هم مثل تأییدِ QR عمر دارد و ردیفِ ثابتِ کهنه
+    // با قاعدهٔ ۳۰ ثانیه «منقضی» حساب می‌شد.
+    DB::$presenceRow = (object) ['id' => 8, 'method' => 'manual', 'confirmed_at' => date('Y-m-d H:i:s'), 'consumed_at' => null];
     check(
         'تأییدِ دستیِ مدیر هم قفل را باز می‌کند',
         MobilePresence::blocksPunch(12, $dmy, 'start') === false
@@ -364,6 +395,78 @@ namespace {
         'تأییدِ آماده lock را برمی‌دارد',
         $ready['pending'] === true && $ready['lock'] === false
     );
+
+    // ------------------------------------------------- مهلتِ تأیید (۳۰ ثانیه)
+    // قاعده: تأیید فقط می‌گوید «همین حالا در برابرِ کارت بودم». بعد از مهلت
+    // دوباره اسکن می‌خواهد — وگرنه یک اسکنِ صبح تا شب درِ ثبت را باز می‌گذاشت.
+    check(
+        'پیش‌فرضِ مهلت ۳۰ ثانیه است',
+        MobilePresence::punchWindow() === 30,
+        (string) MobilePresence::punchWindow()
+    );
+
+    DB::reset();
+    DB::$presenceRow = $pendingRow;
+    $fresh = MobilePresence::state(12, $dmy);
+    check(
+        'تأییدِ همین لحظه مهلتِ مثبت به اپ می‌دهد',
+        $fresh['pending'] === true && $fresh['lock'] === false && $fresh['seconds_left'] > 0
+            && $fresh['seconds_left'] <= 30,
+        'seconds_left=' . $fresh['seconds_left']
+    );
+    check(
+        'تأییدِ تازه در پنجره ثبت را باز می‌کند',
+        MobilePresence::blocksPunch(12, $dmy, 'start') === false
+    );
+
+    // ۳۱ ثانیه قبل: از مهلت گذشته است.
+    $oldRow = (object) [
+        'id' => 9,
+        'method' => 'qr',
+        'confirmed_at' => date('Y-m-d H:i:s', time() - 31),
+        'consumed_at' => null,
+    ];
+
+    DB::reset();
+    DB::$presenceRow = $oldRow;
+    $stale = MobilePresence::state(12, $dmy);
+    check(
+        'تأییدِ کهنه‌تر از ۳۰ ثانیه دیگر آماده نیست',
+        $stale['pending'] === false && $stale['seconds_left'] === 0
+    );
+    check(
+        'و ثبت را دوباره قفل می‌کند',
+        $stale['lock'] === true
+            && MobilePresence::blocksPunch(12, $dmy, 'start') === true
+            && MobilePresence::blocksPunch(12, $dmy, 'pause') === true
+    );
+    check(
+        'تأییدِ منقضی مصرف هم نمی‌شود (سابقه می‌ماند، در باز نمی‌شود)',
+        MobilePresence::consume(12, $dmy) === false && empty(DB::$updated)
+    );
+
+    // ۲۹ ثانیه قبل: هنوز داخلِ پنجره است (مرز با یک ثانیه فاصله سنجیده می‌شود).
+    DB::reset();
+    DB::$presenceRow = (object) [
+        'id' => 10,
+        'method' => 'qr',
+        'confirmed_at' => date('Y-m-d H:i:s', time() - 29),
+        'consumed_at' => null,
+    ];
+    check(
+        'تأییدِ ۲۹ ثانیه‌ای هنوز معتبر است',
+        MobilePresence::blocksPunch(12, $dmy, 'start') === false
+    );
+
+    // راهِ فرار: مهلتِ صفر یعنی بدونِ انقضا.
+    $GLOBALS['presence_config']['services.mobile.qr.punch_window'] = 0;
+    DB::reset();
+    DB::$presenceRow = $oldRow;
+    check(
+        'با مهلتِ صفر، ردیفِ کهنه هم باز می‌کند (بدونِ انقضا)',
+        MobilePresence::punchWindow() === 0 && MobilePresence::blocksPunch(12, $dmy, 'start') === false
+    );
+    $GLOBALS['presence_config']['services.mobile.qr.punch_window'] = 30;
 
     // ---------------------------------------------- خاموش‌کردنِ اجبار
     $GLOBALS['presence_config']['services.mobile.qr.required'] = false;
