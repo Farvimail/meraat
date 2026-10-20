@@ -238,8 +238,11 @@ class MobileApiController extends Controller
         $presence = MobilePresence::today($user->id, $dmy);
 
         return response()->json([
+            // شناسهٔ ردیفِ تأیید هم در انگشتِ تغییر هست: از وقتی هر ثبت تأییدِ
+            // خودش را دارد، دو تأیید می‌توانند داخلِ یک ثانیه نوشته شوند و فقط
+            // با `confirmed_at` از هم تشخیص داده نمی‌شدند.
             'revision' => ($punches->rows_count ?? 0) . ':' . ($punches->last_id ?? 0)
-                . ':' . (empty($presence) ? '-' : (string) $presence->confirmed_at),
+                . ':' . (empty($presence) ? '-' : $presence->id . '@' . (string) $presence->confirmed_at),
             'dmy' => (int) $dmy,
             'server_time' => $this->serverTime(),
         ]);
@@ -275,21 +278,25 @@ class MobileApiController extends Controller
 
         $dmy = $this->realDmy();
 
-        // ترتیبِ تصمیم‌گرفته‌شده: **اول تأییدِ حضور، بعد ثبتِ ورود و خروج.**
-        // کارمندی که حضورِ امروزش را با اسکنِ QR (یا دستِ مدیر) تأیید نکرده،
-        // نه ورود می‌زند و نه خروج. عمداً اینجا و نه فقط در دکمهٔ اپ: اپ می‌تواند
-        // دکمه‌اش را قفل کند، ولی مرجعِ قاعده باید سرور باشد — وگرنه یک درخواستِ
-        // دستی از آن رد می‌شود و «در برابرِ صفحه بودن» بی‌معنی می‌شود.
-        // پیام عمداً می‌گوید «چه کار کنم»، نه فقط «نشد».
-        if (MobilePresence::blocksPunch($user->id, $dmy)) {
+        // چه کاری در نوبت است، پیش از هر چیز: قفلِ تأیید به همین نوبت بند است
+        // (ورود و خروج هر دو تأییدِ تازه می‌خواهند).
+        $expected = $this->nextIntent($user->id);
+
+        // ترتیبِ تصمیم‌گرفته‌شده: **اول تأییدِ حضور، بعد ثبت — هم ورود، هم خروج.**
+        // هر ثبتِ تازه یک تأییدِ تازه لازم دارد — نه یکی برای کلِ روز. یعنی
+        // کارمندی که چهار ساعت کار کرده و خروج می‌زند، برای همان خروج هم باید
+        // اول QR کارتِ خودش را اسکن کند و بعد اثرِ انگشت بزند؛ وگرنه یک اسکنِ
+        // صبح، تا شب درِ ثبت را باز می‌گذاشت.
+        // عمداً اینجا و نه فقط در دکمهٔ اپ: اپ می‌تواند دکمه‌اش را قفل کند، ولی
+        // مرجعِ قاعده باید سرور باشد — وگرنه یک درخواستِ دستی از آن رد می‌شود و
+        // «در برابرِ صفحه بودن» بی‌معنی می‌شود. پیام عمداً می‌گوید «چه کار کنم».
+        if (MobilePresence::blocksPunch($user->id, $dmy, $expected)) {
             return $this->fail(
                 403,
                 'presence_required',
-                'اول با اسکنِ QR روی کارتِ خودتان حضورِ امروز را تأیید کنید؛ بعد از آن ثبتِ ورود و خروج کار می‌کند.'
+                'برای ثبتِ حضور، اول حضور را تأیید کنید: QR روی کارتِ خودتان در پنل را با دوربینِ همین اپ اسکن کنید.'
             );
         }
-
-        $expected = $this->nextIntent($user->id);
 
         if ($intent !== $expected) {
             // همان قاعدهٔ `SavedTimeController::noDuplicate()`: دو ورود پشت‌سرهم
@@ -320,6 +327,11 @@ class MobileApiController extends Controller
             ]);
 
             TimerController::create($user, $calendarId, $savedTime->id);
+
+            // تأییدِ مصرف‌نشده فقط با ثبتِ **موفقِ** خرج می‌شود (ورود یا خروج).
+            // اگر همین‌جا داخلِ تراکنش باشد و ثبت شکست بخورد، rollback تأیید را
+            // هم برمی‌گرداند و کارمند مجبور به اسکنِ دوباره نمی‌شود.
+            MobilePresence::consume($user->id, $dmy);
 
             DB::commit();
         } catch (\Throwable $error) {
@@ -591,9 +603,12 @@ class MobileApiController extends Controller
             'dmy' => (int) $dmy,
             'punches' => $rows,
             'server_time' => $this->serverTime(),
-            // وضعیتِ تأییدِ حضورِ امروز: اپ با همین می‌فهمد بعد از ثبتِ ورود
-            // باید دوربین را باز کند یا نه (`required && !confirmed`).
-            'qr' => MobilePresence::state($customerId, $dmy),
+            // وضعیتِ تأییدِ حضور: اپ با `pending` می‌فهمد تأییدی برای همین
+            // ثبتِ بعدی آماده است یا نه، و با `lock` همان قاعدهٔ سرور را
+            // پیش از ضربهٔ دکمه نشان می‌دهد. تأییدِ قبلی‌ای که با ثبتِ قبلی
+            // خرج شده، `pending` را false می‌کند؛ پس ورودِ بعدی دوباره مسکن
+            // می‌خواهد.
+            'qr' => MobilePresence::state($customerId, $dmy, null, $this->nextIntent($customerId)),
         ];
     }
 
@@ -904,7 +919,7 @@ class MobileApiController extends Controller
 
         return response()->json([
             'confirmed' => true,
-            'qr' => MobilePresence::state($user->id, $dmy),
+            'qr' => MobilePresence::state($user->id, $dmy, null, $this->nextIntent($user->id)),
             'employee' => $this->employee($user),
         ]);
     }

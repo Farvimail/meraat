@@ -34,8 +34,12 @@ const panelSource = readFileSync(
 
 /** کدهای نمونه‌ای که واقعاً روی کارتِ کارمند می‌نشینند. */
 const SAMPLES = [
+  // کدِ ثابتِ امروز: جای «پنجره» صفر است.
+  'v1.12.0.0f1e2d3c4b5a6978',
+  'v1.7.0.abcdef0123456789',
+  // دو نمونهٔ قدیمیِ چرخان: کدگذار باید هر رشته‌ای را بکشد، حتی کدِ باطل؛
+  // صفحه نباید به خاطرِ یک کدِ کهنه بشکند.
   'v1.12.1750000000.0f1e2d3c4b5a6978',
-  'v1.7.1750000001.abcdef0123456789',
   'v1.103.1.0123456789abcdef',
 ];
 
@@ -96,6 +100,10 @@ test('کدِ سرور به شکل v1.<کارمند>.<پنجره>.<امضا> اس
     assert.match(sample, /^v1\.\d+\.\d+\.[0-9a-f]{16}$/, 'قالبِ کد عوض شده');
   }
 
+  // کدِ ثابتِ واقعی: پنجره صفر است و اپِ نصب‌شده (که همین قالب را می‌سنجد)
+  // بدونِ buildِ تازه آن را می‌پذیرد.
+  assert.match(SAMPLES[0], /^v1\.12\.0\.[0-9a-f]{16}$/, 'کدِ ثابت باید پنجرهٔ صفر داشته باشد');
+
   const size = matrixSize(window.MeraatQr.toQR(SAMPLES[0]));
 
   assert.ok(size >= 21 && size <= 57, `اندازهٔ غیرمنتظره: ${size}`);
@@ -150,6 +158,103 @@ test('کدِ نامعتبر (ماتریسِ نامربع) رد می‌شود', (
   window.MeraatQr = { toQR: () => new Uint8Array(10) };
 
   assert.equal(window.MeraatPresenceQr.qrCells('x'), null);
+});
+
+/*
+ * کدِ ثابت دیگر چرخهٔ ۳۰ ثانیه‌ای ندارد.
+ *
+ * صفحهٔ اصلیِ حضور عمومی است و کدها را بی‌نشست می‌گیرد؛ اگر اسکریپت مثل قبل
+ * هر ۳۰ ثانیه درخواست می‌زد، برای کدی که هرگز عوض نمی‌شود هر دقیقه دو
+ * درخواست به سرور می‌رفت. این تست همان تحدید را نگه می‌دارد.
+ */
+function loadPanelStatic() {
+    const timers = [];
+    const fetched = [];
+
+    const canvas = {
+        width: 0,
+        height: 0,
+        getContext: () => ({ fillStyle: '', fillRect() {} }),
+    };
+
+    const badge = {
+        hidden: false,
+        attrs: { 'data-customer-id': '12' },
+        getAttribute(name) {
+            return name in this.attrs ? this.attrs[name] : null;
+        },
+        setAttribute(name, value) {
+            this.attrs[name] = String(value);
+        },
+        querySelector: (selector) => (selector === 'canvas' ? canvas : null),
+        closest: () => null,
+        classList: { add() {}, remove() {} },
+        scrollIntoView() {},
+    };
+
+    const document = {
+        readyState: 'complete',
+        hidden: false,
+        addEventListener() {},
+        querySelectorAll(selector) {
+            return selector === '[data-presence-qr]' ? [badge] : [];
+        },
+        querySelector() {
+            return null;
+        },
+    };
+
+    const fetchStub = (url) => {
+        fetched.push(String(url));
+
+        return Promise.resolve({
+            status: 200,
+            ok: true,
+            json: () =>
+                Promise.resolve({
+                    // دقیقاً همان پاسخِ سرور برای کاربرِ بدونِ نشست:
+                    // بدونِ `confirmed` و بدونِ `expires_in`.
+                    mode: 'static',
+                    enabled: true,
+                    required: true,
+                    codes: { 12: 'v1.12.0.0f1e2d3c4b5a6978' },
+                }),
+        });
+    };
+
+    const window = loadVendor();
+
+    new Function('window', 'document', 'fetch', 'FormData', 'setTimeout', panelSource)(
+        window,
+        document,
+        fetchStub,
+        class {
+            append() {}
+        },
+        (fn) => {
+            timers.push(fn);
+            return timers.length;
+        },
+    );
+
+    return { window, canvas, timers, fetched, badge };
+}
+
+/** صبر می‌کند تا زنجیرهٔ promiseهای `load()` تمام شود. */
+async function settle() {
+    for (let i = 0; i < 6; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+}
+
+test('کدِ ثابت یک بار کشیده می‌شود و هیچ تازه‌سازیِ دوره‌ای ندارد', async () => {
+    const panel = loadPanelStatic();
+    await settle();
+
+    assert.equal(panel.fetched.length, 1, 'فقط یک درخواست برای صفحهٔ کدِ ثابت');
+    assert.equal(panel.timers.length, 0, 'کدِ ثابت تایمرِ تازه‌سازی ندارد');
+    assert.ok(panel.canvas.width > 0, 'کد باید روی canvas کشیده شده باشد');
+    assert.equal(panel.badge.hidden, false, 'کدِ ثابت باید دیده شود (دسترسیِ عمومی)');
 });
 
 /*

@@ -4,10 +4,10 @@
  * بررسیِ منطقِ کدِ QR تأییدِ حضور (`app/MobilePresence.php`).
  *
  * چرا این فایل وجود دارد: تمامِ امنیتِ این مسیر به سه چیز بند است — قالبِ کد،
- * امضای HMAC و پنجرهٔ زمانی. هر سه از بیرون «کار می‌کنند» و اگر یکی خراب شود
- * (مثلاً پنجرهٔ قبلی پذیرفته نشود یا امضا با کدِ کارمندِ دیگر عوض نشود) هیچ
- * خطایی دیده نمی‌شود؛ فقط تأییدِ حضور بی‌سروصدا می‌شکند یا بی‌اعتبار می‌شود.
- * پس اینها را مستقیم تست می‌کنیم.
+ * امضای HMAC و ثابت‌بودنِ کد برای هر کارمند (چرخش کنار گذاشته شد). هر سه از
+ * بیرون «کار می‌کنند» و اگر یکی خراب شود (مثلاً کدِ کارمندِ دیگر پذیرفته شود
+ * یا کد به ساعت گره بخورد) هیچ خطایی دیده نمی‌شود؛ فقط تأییدِ حضور بی‌سروصدا
+ * می‌شکند یا بی‌اعتبار می‌شود. پس اینها را مستقیم تست می‌کنیم.
  *
  * اجرا روی سرور (این پروژه PHPUnit ندارد و سرورِ محلی هم PHP ندارد، پس داخل
  * همان کانتینری اجرا می‌شود که کد در آن می‌دود):
@@ -22,6 +22,11 @@
  * وقتی `blocksPunch` آمد، «ردیفِ تأیید هست یا نه» خودش یک تصمیمِ مهم شد؛ پس
  * facade دیتابیس با یک جعلیِ کمینه عوض می‌شود تا هر دو حالت — و مهم‌تر از
  * آن‌ها حالتِ خطا (جدولِ تأیید ساخته نشده) — سنجیده شوند.
+ *
+ * از وقتی هر ثبت تأییدِ خودش را دارد، جعلیِ دیتابیس باید `whereNull('consumed_at')`
+ * را هم بفهمد: ردیفی که مصرف شده («تأیید با ثبتِ قبلی خرج شد») نباید در
+ * جست‌وجوی «تأییدِ آماده» پیدا شود. همان اشتباهی که این migration و این تست
+ * جلویش را می‌گیرند: یک تأییدِ صبح که تا شب درها را باز بگذارد.
  */
 
 // --- ایستگاهِ وابستگی‌ها ------------------------------------------------------
@@ -44,6 +49,20 @@ namespace Illuminate\Support\Facades {
         /** اگر true باشد، هر کوئری مثلِ «جدول نیست» می‌افتد. */
         public static $fail = false;
 
+        /** ردیف‌هایی که با insert نوشته شده‌اند (برای سنجشِ `confirm`). */
+        public static $inserted = array();
+
+        /** ردیف‌هایی که با update عوض شده‌اند (برای سنجشِ `consume`). */
+        public static $updated = array();
+
+        public static function reset()
+        {
+            self::$presenceRow = null;
+            self::$fail = false;
+            self::$inserted = array();
+            self::$updated = array();
+        }
+
         public static function table($name)
         {
             if (self::$fail) {
@@ -59,6 +78,9 @@ namespace Illuminate\Support\Facades {
     {
         private $table;
 
+        /** آیا `whereNull('consumed_at')` صدا زده شده؟ */
+        private $pendingOnly = false;
+
         public function __construct($table)
         {
             $this->table = $table;
@@ -69,19 +91,58 @@ namespace Illuminate\Support\Facades {
             return $this;
         }
 
+        public function whereNull($column)
+        {
+            if ($column === 'consumed_at') {
+                $this->pendingOnly = true;
+            }
+
+            return $this;
+        }
+
+        public function orderBy($column, $direction = 'asc')
+        {
+            return $this;
+        }
+
         public function first()
         {
+            if ($this->pendingOnly && DB::$presenceRow && ! empty(DB::$presenceRow->consumed_at)) {
+                // ردیفِ مصرف‌شده «تأییدِ آماده» نیست؛ همان اشتباهی که یک تأیید
+                // را به کلِ روز گره می‌زد.
+                return null;
+            }
+
             return DB::$presenceRow;
+        }
+
+        public function insert($values)
+        {
+            DB::$inserted[] = $values;
+
+            return true;
+        }
+
+        public function update($values)
+        {
+            DB::$updated[] = $values;
+
+            return 1;
         }
     }
 }
 
 namespace {
 
+    // جعلیِ دیتابیس در namespaceِ facade تعریف شده و خودِ `MobilePresence` هم
+    // آن را از همین‌جا می‌خواند؛ این `use` فقط برای همین فایلِ تست است تا
+    // `DB::reset()` در کدِ پایین به همان کلاس برسد (بدونش، تست وسطِ کار با
+    // «Class 'DB' not found» می‌مرد و بخشِ قفلِ ثبت هیچ‌وقت سنجیده نمی‌شد).
+    use Illuminate\Support\Facades\DB;
+
     $GLOBALS['presence_config'] = [
         'services.mobile.qr.key' => 'test-key-0123456789abcdef',
         'services.mobile.qr.required' => true,
-        'services.mobile.qr.window' => 30,
     ];
 
     function config($key, $default = null)
@@ -116,10 +177,10 @@ namespace {
     echo "منطقِ کدِ QR تأییدِ حضور\n";
 
     // ---------------------------------------------------------------- قالبِ کد
-    $code = MobilePresence::codeFor(12, MobilePresence::windowAt($now));
+    $code = MobilePresence::codeFor(12);
     check(
-        'قالبِ کد v1.<کارمند>.<پنجره>.<۱۶ کاراکترِ امضا> است',
-        (bool) preg_match('/^v1\.12\.\d+\.[0-9a-f]{16}$/', $code),
+        'قالبِ کد v1.<کارمند>.0.<۱۶ کاراکترِ امضا> است (جایِ «پنجره» صفر است)',
+        (bool) preg_match('/^v1\.12\.0\.[0-9a-f]{16}$/', $code),
         $code
     );
 
@@ -128,54 +189,53 @@ namespace {
     check('required با کلیدِ پر و required=true یعنی بله', MobilePresence::required() === true);
 
     // --------------------------------------------------------------- امضا
-    $other = MobilePresence::codeFor(13, MobilePresence::windowAt($now));
+    $other = MobilePresence::codeFor(13);
     check('کدِ دو کارمندِ مختلف یکی نیست', $code !== $other);
 
-    $forged = 'v1.12.' . MobilePresence::windowAt($now) . '.0123456789abcdef';
+    // استراتژیِ تازه: کد **ثابت** است. اگر فردا کسی دوباره چرخش را برگرداند،
+    // همین دو بررسی می‌شکند و جلوی برگشتِ بی‌صدای آن را می‌گیرد.
+    check(
+        'کدِ یک کارمند در دو بار خواندن یکی است (ثابت، نه چرخان)',
+        MobilePresence::codeFor(12) === $code
+    );
+    check(
+        'کد به زمان وابسته نیست (هیچ ورودیِ زمانی ندارد)',
+        (new ReflectionMethod(MobilePresence::class, 'codeFor'))->getNumberOfParameters() === 1
+    );
+
+    $forged = 'v1.12.0.0123456789abcdef';
     check(
         'کدِ دست‌ساز رد می‌شود',
-        MobilePresence::verify($forged, 12, $now)['status'] === 'bad'
+        MobilePresence::verify($forged, 12)['status'] === 'bad'
     );
 
     $tampered = substr($code, 0, -1) . ($code[strlen($code) - 1] === 'a' ? 'b' : 'a');
     check(
         'کدِ یک کاراکتر دست‌کاری‌شده رد می‌شود',
-        MobilePresence::verify($tampered, 12, $now)['status'] === 'bad'
-    );
-
-    // ------------------------------------------------------------ پنجرهٔ زمانی
-    $currentWindow = MobilePresence::windowAt($now);
-
-    check(
-        'کدِ پنجرهٔ جاری پذیرفته می‌شود',
-        MobilePresence::verify(MobilePresence::codeFor(12, $currentWindow), 12, $now)['status'] === 'ok'
-    );
-
-    // دلیلِ پذیرشِ پنجرهٔ قبلی: کارمند می‌تواند نیم‌ثانیه پیش از عوض شدنِ کد
-    // آن را خوانده باشد؛ رد کردنش یعنی پشتِ در ماندن.
-    check(
-        'کدِ پنجرهٔ قبلی هم پذیرفته می‌شود (برای مرزِ عوض شدنِ کد)',
-        MobilePresence::verify(MobilePresence::codeFor(12, $currentWindow - 1), 12, $now)['status'] === 'ok'
+        MobilePresence::verify($tampered, 12)['status'] === 'bad'
     );
 
     check(
-        'کدِ دو پنجره قبل منقضی است',
-        MobilePresence::verify(MobilePresence::codeFor(12, $currentWindow - 2), 12, $now)['status'] === 'expired'
+        'کدِ ثابتِ خودِ کارمند پذیرفته می‌شود',
+        MobilePresence::verify($code, 12)['status'] === 'ok'
     );
 
+    // کدِ چرخانِ قاعدهٔ قبلی (`v1.<id>.<window>.<mac>`) دیگر ساخته نمی‌شود و
+    // نباید پذیرفته شود؛ وگرنه یک اسکرین‌شاتِ کهنه دوباره زنده می‌شد.
+    $rotating = 'v1.12.' . intdiv($now, 30) . '.' . substr(hash_hmac('sha256', 'v1|12|' . intdiv($now, 30), 'test-key-0123456789abcdef'), 0, 16);
     check(
-        'کدِ پنجرهٔ آینده پذیرفته نمی‌شود (ساعتِ گوشی کاری نمی‌کند)',
-        MobilePresence::verify(MobilePresence::codeFor(12, $currentWindow + 5), 12, $now)['status'] === 'expired'
+        'کدِ چرخانِ قاعدهٔ قبلی پذیرفته نمی‌شود',
+        MobilePresence::verify($rotating, 12)['status'] === 'bad'
     );
 
     // ------------------------------------------------------- کارمندِ دیگری
     check(
         'کدِ کارمندِ دیگر «foreign» است، نه معتبر',
-        MobilePresence::verify($other, 12, $now)['status'] === 'foreign'
+        MobilePresence::verify($other, 12)['status'] === 'foreign'
     );
 
     // ------------------------------------------------------------ خروجیِ دسته‌ای
-    $payload = MobilePresence::codesFor([12, 13, 0, 12], $now);
+    $payload = MobilePresence::codesFor([12, 13, 0, 12]);
 
     // کلیدهای آرایه در PHP عددی می‌شوند (‎'12'‎ → ‎12‎)، پس برای سنجش با متن
     // ابتدا رشته می‌شوند؛ همان چیزی که در JSON به کلیدِ رشته‌ای تبدیل می‌شود.
@@ -186,15 +246,12 @@ namespace {
     );
     check('شناسهٔ صفر ساخته نمی‌شود', ! isset($payload['codes']['0']));
     check(
-        'expires_in داخل بازهٔ پنجره است',
-        $payload['expires_in'] >= 1 && $payload['expires_in'] <= MobilePresence::windowSize(),
-        (string) $payload['expires_in']
+        'پاسخ حالت را `static` اعلام می‌کند',
+        $payload['mode'] === 'static',
+        (string) $payload['mode']
     );
-    check(
-        'همهٔ کدهای یک پاسخ در یک پنجره‌اند',
-        $payload['window'] === $currentWindow,
-        (string) $payload['window']
-    );
+    check('کدِ هر کارمند همان کدِ ثابتِ خودش است', $payload['codes']['12'] === $code);
+    check('کدِ ثابت تاریخ انقضا ندارد (expires_in حذف شده)', ! array_key_exists('expires_in', $payload));
 
     // ------------------------------------------------------- خاموش کردنِ کلید
     $GLOBALS['presence_config']['services.mobile.qr.key'] = '';
@@ -210,57 +267,134 @@ namespace {
     $GLOBALS['presence_config']['services.mobile.qr.required'] = false;
     check('با required=false تأیید اجباری نیست ولی کد ساخته می‌شود', MobilePresence::required() === false && MobilePresence::enabled() === true);
 
-    // ------------------------------------- قفلِ ثبت تا تأییدِ حضورِ روز
-    // قاعدهٔ تصمیم‌گرفته‌شده: **اول تأیید، بعد ثبت.** تا ردیفِ تأییدِ امروز
-    // نباشد، نه ورود ثبت می‌شود نه خروج — و این تصمیم در سرور گرفته می‌شود،
-    // نه فقط در دکمهٔ اپ.
+    // ------------------------------------- قفلِ ثبت تا تأییدِ همین ثبت
+    // قاعدهٔ تصمیم‌گرفته‌شده: **اول تأیید، بعد ثبت؛ هر ثبت یک تأیید.**
+    // یک تأییدِ صبح نباید ورودِ عصر را باز کند. همین می‌شود همان باگی که
+    // کاربر گزارش داد: یک اسکن، تمامِ روز ثبت را آزاد می‌گذاشت.
+    $dmy = '17102026';
+    $pendingRow = (object) ['id' => 7, 'method' => 'qr', 'confirmed_at' => '2026-10-17 08:05:00', 'consumed_at' => null];
+    $usedRow = (object) ['id' => 7, 'method' => 'qr', 'confirmed_at' => '2026-10-17 08:05:00', 'consumed_at' => '2026-10-17 08:06:00'];
+
     $GLOBALS['presence_config']['services.mobile.qr.required'] = true;
-    DB::$presenceRow = null;
+    DB::reset();
     check(
-        'بدونِ تأییدِ امروز، ثبتِ ورود/خروج قفل است',
-        MobilePresence::blocksPunch(12, '17102026') === true
+        'بدونِ تأیید، ورودِ تازه قفل است',
+        MobilePresence::blocksPunch(12, $dmy, 'start') === true
     );
 
-    DB::$presenceRow = (object) ['method' => 'qr', 'confirmed_at' => '2026-10-17 08:05:00'];
+    DB::$presenceRow = $pendingRow;
     check(
-        'با تأییدِ امروز، قفل باز است',
-        MobilePresence::blocksPunch(12, '17102026') === false
+        'با تأییدِ مصرف‌نشده، ورود باز است',
+        MobilePresence::blocksPunch(12, $dmy, 'start') === false
+    );
+    check(
+        'و خروج هم با همان تأییدِ آماده باز است',
+        MobilePresence::blocksPunch(12, $dmy, 'pause') === false
+    );
+
+    // 🔴 قلبِ این تغییر: تأییدی که با ثبتِ قبلی «خرج» شده، نه ورودِ بعدی را
+    // باز می‌کند نه خروجِ بعدی؛ وگرنه دو ثبت در یک روز فقط یک اسکن می‌خواست.
+    DB::$presenceRow = $usedRow;
+    check(
+        'تأییدِ مصرف‌شده، ورودِ بعدی را باز نمی‌کند',
+        MobilePresence::blocksPunch(12, $dmy, 'start') === true
+    );
+    check(
+        'و خروجِ همان شیفت هم قفل است (خروج هم تأییدِ تازه می‌خواهد)',
+        MobilePresence::blocksPunch(12, $dmy, 'pause') === true
+    );
+    check(
+        'و ردیفِ تأیید برای نمایش باقی می‌ماند',
+        MobilePresence::today(12, $dmy) !== null
     );
 
     // تأییدِ دستیِ مدیر هم همان ردیف را می‌نویسد، پس همان قفل را باز می‌کند.
-    DB::$presenceRow = (object) ['method' => 'manual', 'confirmed_at' => '2026-10-17 08:30:00'];
+    DB::$presenceRow = (object) ['id' => 8, 'method' => 'manual', 'confirmed_at' => '2026-10-17 08:30:00', 'consumed_at' => null];
     check(
         'تأییدِ دستیِ مدیر هم قفل را باز می‌کند',
-        MobilePresence::blocksPunch(12, '17102026') === false
+        MobilePresence::blocksPunch(12, $dmy, 'start') === false
+    );
+    check(
+        'و قفلِ خروج را هم باز می‌کند',
+        MobilePresence::blocksPunch(12, $dmy, 'pause') === false
     );
 
-    DB::$presenceRow = null;
+    // --------------------------------------- مصرف و ثبتِ دوبارهٔ تأیید
+    DB::reset();
+    DB::$presenceRow = $pendingRow;
+    check(
+        'consume تأییدِ آماده را مصرف می‌کند',
+        MobilePresence::consume(12, $dmy) === true && ! empty(DB::$updated) && ! empty(DB::$updated[0]['consumed_at'])
+    );
+
+    DB::reset();
+    DB::$presenceRow = $usedRow;
+    check(
+        'اگر تأییدِ آمده‌ای نباشد، consume کاری نمی‌کند',
+        MobilePresence::consume(12, $dmy) === false && empty(DB::$updated)
+    );
+
+    DB::reset();
+    MobilePresence::confirm(12, $dmy, MobilePresence::METHOD_QR, 42, '10.0.0.1');
+    check(
+        'هر confirm یک ردیفِ تازه می‌نویسد، نه بازنویسیِ ردیفِ قبلی',
+        count(DB::$inserted) === 1
+            && array_key_exists('consumed_at', DB::$inserted[0])
+            && DB::$inserted[0]['consumed_at'] === null
+    );
+
+    // ------------------------------------- وضعیتِ ارسالی به اپ/پنل (`state`)
+    DB::reset();
+    DB::$presenceRow = $usedRow;
+    $forStart = MobilePresence::state(12, $dmy, $now, 'start');
+    $forPause = MobilePresence::state(12, $dmy, $now, 'pause');
+    check(
+        'پس از مصرف، state برای ورودِ تازه lock می‌دهد',
+        $forStart['lock'] === true && $forStart['confirmed'] === true && $forStart['pending'] === false
+    );
+    check(
+        'همان state برای خروج هم lock می‌دهد (خروج هم تأییدِ تازه می‌خواهد)',
+        $forPause['lock'] === true
+            && $forPause['intent'] === 'pause'
+    );
+
+    DB::$presenceRow = $pendingRow;
+    $ready = MobilePresence::state(12, $dmy, $now, 'start');
+    check(
+        'تأییدِ آماده lock را برمی‌دارد',
+        $ready['pending'] === true && $ready['lock'] === false
+    );
+
+    // ---------------------------------------------- خاموش‌کردنِ اجبار
     $GLOBALS['presence_config']['services.mobile.qr.required'] = false;
+    DB::reset();
     check(
         'با required=false قفل بی‌اثر است',
-        MobilePresence::blocksPunch(12, '17102026') === false
+        MobilePresence::blocksPunch(12, $dmy, 'start') === false
     );
 
     $GLOBALS['presence_config']['services.mobile.qr.key'] = '';
     check(
         'بدونِ کلید (مسیرِ خاموش) هیچ قفلی نیست',
-        MobilePresence::blocksPunch(12, '17102026') === false
+        MobilePresence::blocksPunch(12, $dmy, 'start') === false
     );
 
     // نبودِ جدولِ تأیید (migration اجرا نشده) نباید کارمند را پشتِ در بگذارد:
     // «قفل نکردن» خطای کوچک است، «قفلِ بی‌دلیل» خطای بزرگ.
     $GLOBALS['presence_config']['services.mobile.qr.key'] = 'test-key-0123456789abcdef';
     $GLOBALS['presence_config']['services.mobile.qr.required'] = true;
+    DB::reset();
     DB::$fail = true;
     check(
         'اگر جدولِ تأیید خوانده نشود، ثبت قفل نمی‌شود',
-        MobilePresence::blocksPunch(12, '17102026') === false
+        MobilePresence::blocksPunch(12, $dmy, 'start') === false
     );
     DB::$fail = false;
 
+    DB::reset();
     check(
         'ردیفِ تأیید هم با همان قاعده خوانده می‌شود (بدونِ استثناء)',
-        MobilePresence::today(12, '17102026') === null && MobilePresence::blocksPunch(12, '17102026') === true
+        MobilePresence::today(12, $dmy) === null && MobilePresence::blocksPunch(12, $dmy, 'start') === true
     );
 
     echo $failures === 0

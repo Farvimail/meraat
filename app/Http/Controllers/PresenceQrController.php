@@ -7,17 +7,17 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 /**
- * کدهای QR تأییدِ حضور — سمتِ **پنل** (نشستِ مدیر/مدیر ارشد).
+ * کدهای QR تأییدِ حضور — سمتِ **صفحهٔ حضور** (و پنل).
  *
  * چرا اینجا و نه در `MobileApiController`: آن کلاس با توکنِ گوشی کار می‌کند،
- * ولی این مسیرها را مرورگرِ پنل صدا می‌زند؛ پس همان احراز هویتِ نشستِ پنل
- * لازم است. اگر اینها در API باز بودند، هر کسی می‌توانست کدِ چرخانِ یک
- * کارمند را از راه دور بگیرد و تأییدِ حضور را بی‌آنکه در محل کار باشد
- * جعل کند — یعنی کل خاصیتِ «در برابرِ صفحه بودن».
+ * ولی این مسیر را مرورگر صدا می‌زند.
  *
- * دو کار: دادنِ کدِ لحظه‌ایِ همهٔ کارمندهای یک صفحه در یک پاسخ، و ثبتِ
- * تأییدِ دستیِ مدیر (راهِ فراری که تصمیم گرفته شد: دوربینِ خراب نباید کارمند
- * را پشتِ در نگه دارد).
+ * **دسترسیِ بدونِ نشست:** کد دیگر چرخان نیست؛ هر کارمند یک کدِ ثابتِ مخصوصِ
+ * خودش دارد و کارتِ او در صفحهٔ اصلیِ حضور برای همه (بدونِ ورودِ مدیر) دیده
+ * می‌شود. پس `codes` عمداً نشست نمی‌خواهد — وگرنه کارمندی که مدیر پشتِ
+ * سیستم نیست نمی‌توانست QR خودش را ببیند. چیزی که **نمی‌شود** بدونِ نشست
+ * گرفت، وضعیتِ تأییدِ امروزِ کارمندهاست؛ آن بخش فقط برای کاربرِ پنل در پاسخ
+ * می‌آید. ثبتِ تأییدِ دستی هم مثل قبل پشتِ نشست است.
  */
 class PresenceQrController extends Controller
 {
@@ -25,45 +25,49 @@ class PresenceQrController extends Controller
     const MAX_IDS = 200;
 
     /**
-     * کدهای لحظه‌ای + وضعیتِ تأییدِ امروز.
+     * کدِ ثابتِ هر کارمند (+ وضعیتِ تأییدِ امروز فقط برای کاربرِ پنل).
      *
-     * خروجی:
+     * خروجی برای مرورگرِ بدونِ نشست:
      *   {
-     *     "window": 1234567, "expires_in": 17,
-     *     "enabled": true, "required": true,
-     *     "codes":     {"12": "v1.12.1234567.abcdef0123456789"},
-     *     "confirmed": {"12": {"method": "qr", "at": "2026-10-16 10:30:00"}}
+     *     "mode": "static", "enabled": true, "required": true,
+     *     "codes": {"12": "v1.12.0.abcdef0123456789"}
      *   }
+     *
+     * و برای کاربرِ پنل، علاوه بر آن:
+     *     "confirmed": {"12": {"method": "qr", "at": "2026-10-16 10:30:00"}}
+     *
+     * `confirmed` یعنی «امروز تأییدی گرفته شد»، با زمانِ **آخرین** تأیید —
+     * از وقتی هر ثبت تأییدِ خودش را دارد، ممکن است در یک روز چند ردیف باشد.
+     * این بخش عمداً برای مرورگرِ بی‌نشست فرستاده نمی‌شود: کدِ ثابت عمومی است
+     * (روی کارتِ همان صفحه نوشته شده) ولی اینکه چه کسی امروز تأیید کرده، نه.
      */
     public function codes(Request $request)
     {
-        if (! $this->panelUser()) {
-            return response()->json(['error' => 'unauthenticated'], 401);
-        }
-
         $ids = $this->ids($request);
-        $dmy = $this->todayDmy();
-
         $payload = MobilePresence::codesFor($ids);
-        $rows = MobilePresence::rowsFor($ids, $dmy);
 
-        $confirmed = [];
-
-        foreach ($rows as $id => $row) {
-            $confirmed[(string) $id] = [
-                'method' => (string) $row->method,
-                'at' => (string) $row->confirmed_at,
-            ];
-        }
-
-        return response()->json([
-            'window' => $payload['window'],
-            'expires_in' => $payload['expires_in'],
+        $response = [
+            'mode' => $payload['mode'],
             'enabled' => MobilePresence::enabled(),
             'required' => MobilePresence::required(),
             'codes' => $payload['codes'],
-            'confirmed' => $confirmed,
-        ]);
+        ];
+
+        // وضعیتِ تأیید فقط برای چشمِ مدیر.
+        if ($this->panelUser()) {
+            $confirmed = [];
+
+            foreach (MobilePresence::rowsFor($ids, $this->todayDmy()) as $id => $row) {
+                $confirmed[(string) $id] = [
+                    'method' => (string) $row->method,
+                    'at' => (string) $row->confirmed_at,
+                ];
+            }
+
+            $response['confirmed'] = $confirmed;
+        }
+
+        return response()->json($response);
     }
 
     /**
@@ -72,6 +76,9 @@ class PresenceQrController extends Controller
      * این همان ردیفی را می‌نویسد که تأییدِ QR می‌نویسد، فقط با
      * `method = manual` تا در گزارش‌ها معلوم باشد کدام تأیید با اسکن بوده و
      * کدام با دستِ مدیر (شفافیت برای بازبینی بعدی).
+     *
+     * هر کلیک **یک** تأییدِ مصرف‌نشده می‌سازد و همان یک ورود را باز می‌کند؛
+     * مثلِ QR، نه «تأیید برای بقیهٔ امروز».
      */
     public function manual(Request $request)
     {

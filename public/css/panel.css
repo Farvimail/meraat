@@ -488,13 +488,13 @@ body.panel-page::before {
     height: 18px;
 }
 
-/* دکمهٔ «پنل مدیریت» در نوار بالای صفحهٔ حضور.
+/* دکمهٔ سبزِ نوار بالای صفحهٔ حضور (امروز: «اپلیکیشن»).
 
    چرا کلاسِ اختصاصی و نه `btn btn-sm btn-primary`: آبیِ `btn-primary` را در
    همین فایل عمداً نگه داشته‌ایم، چون همان رنگ وضعیتِ روزهای تقویم است
-   (حضور/مرخصی/غیبت). این دکمه کاری به تقویم ندارد — راهِ رفتن به پنل مدیریت
-   است — و آبیِ بوت‌استرپ وسطِ پالتِ سبزِ پنل، «از یک برنامهٔ دیگر» به نظر
-   می‌رسید. پس همان سبزِ برند را می‌گیرد. */
+   (حضور/مرخصی/غیبت). این دکمه کاری به تقویم ندارد و آبیِ بوت‌استرپ وسطِ
+   پالتِ سبزِ پنل، «از یک برنامهٔ دیگر» به نظر می‌رسید. پس همان سبزِ برند
+   را می‌گیرد. */
 .att-topbtn {
     display: inline-flex;
     align-items: center;
@@ -516,6 +516,31 @@ body.panel-page::before {
     background-color: var(--panel-link-strong);
     border-color: var(--panel-link-strong);
     color: #fff;
+    text-decoration: none;
+}
+
+/* همان دکمه با آیکونِ گوشی — فشرده‌تر تا در نوارِ شلوغِ بالای صفحه دو خط
+   نشود. */
+.att-topbtn-app {
+    gap: .3rem;
+    padding: .28rem .7rem;
+    font-size: .8rem;
+}
+
+/* «ورود مدیر» برای بازدیدکنندهٔ بی‌نشست. عمداً متنِ کم‌رنگ و بدونِ قاب است،
+   نه دکمه: این صفحه محلِ کارِ کارکنان است و مدیر فقط باید راهش را پیدا
+   کند، نه اینکه دعوت به پنل وسطِ صفحهٔ حضور باشد. */
+.att-login-link {
+    color: var(--panel-muted);
+    font-size: .78rem;
+    text-decoration: none;
+    border-bottom: 1px dashed var(--panel-line);
+    padding-bottom: 1px;
+}
+
+.att-login-link:hover,
+.att-login-link:focus {
+    color: var(--panel-link);
     text-decoration: none;
 }
 
@@ -727,11 +752,13 @@ body.panel-page .btn-sm {
    تفاوتِ رنگ، وضعیتِ ماه را می‌خواند؛ سبزِ برند کردنِ «مرخصی» آن را با
    «حضور» یکی می‌کرد. پس پالتِ برند فقط جایی نشسته که رنگ معنا ندارد. */
 
-body.panel-page .panel-content a:not(.btn):not(.nav-link):not(.page-link) {
+/* دکمهٔ اصلیِ صفحهٔ دانلودِ اپ خودش زمینهٔ سبز و متنِ سفید دارد؛ این قاعده
+   نباید متنش را سبز کند — سبز روی سبز اصلاً خوانا نیست. */
+body.panel-page .panel-content a:not(.btn):not(.nav-link):not(.page-link):not(.app-dl-btn) {
     color: var(--panel-link);
 }
 
-body.panel-page .panel-content a:not(.btn):not(.nav-link):not(.page-link):hover {
+body.panel-page .panel-content a:not(.btn):not(.nav-link):not(.page-link):not(.app-dl-btn):hover {
     color: var(--panel-link-strong);
 }
 
@@ -1518,6 +1545,94 @@ body.panel-page .toasts-stack {
     font-weight: 700;
 }
 
+/* راهنمای کوتاهِ زیرِ فیلد (مثلِ «حداقل ۶ کاراکتر»). عمداً کوچک و کم‌رنگ
+   است تا با متنِ پیامِ خطا اشتباه گرفته نشود. */
+.auth-field-hint {
+    display: block;
+    margin-top: .3rem;
+    color: var(--panel-muted);
+    font-size: .74rem;
+}
+
+/* کارتِ پیام (موفق/خطا) روی فرم‌های صفحه‌های ورود.
+
+   قبلاً فقط ورودی‌ها قرمز می‌شدند و بالای فرم هیچ پیامی نبود؛ روی صفحهٔ
+   تغییر رمز که خطا ممکن است به هیچ فیلدی نچسبد (رمزِ فعلیِ غلط)، باید یک
+   جای مشخص برای خواندنِ دلیل باشد. */
+.auth-note {
+    margin-bottom: 1rem;
+    padding: .6rem .8rem;
+    border-radius: 10px;
+    font-size: .82rem;
+    line-height: 1.9;
+}
+
+.auth-note span {
+    display: block;
+}
+
+.auth-note-ok {
+    border: 1px solid #cfe8d7;
+    background: #f2faf4;
+    color: #14663c;
+}
+
+.auth-note-error {
+    border: 1px solid #f0cfcb;
+    background: #fdf4f3;
+    color: #a12d24;
+}
+
+/* لینک‌های پایینِ فرم (بازگشت به پنل / خروج) — دو کنشِ کم‌اهمیت‌تر از
+   ذخیره، پس در یک ردیفِ جدا و بدونِ دکمهٔ پُر می‌آیند. */
+.auth-links {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .8rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+    font-size: .8rem;
+}
+
+.auth-links a {
+    color: var(--panel-link);
+    text-decoration: none;
+}
+
+.auth-links a:hover,
+.auth-links a:focus {
+    text-decoration: underline;
+}
+
+.auth-logout {
+    margin: 0;
+}
+
+.auth-logout button {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--panel-muted);
+    font-size: inherit;
+    cursor: pointer;
+}
+
+.auth-logout button:hover,
+.auth-logout button:focus {
+    color: #a12d24;
+    text-decoration: underline;
+}
+
+.auth-foot-note {
+    margin: 1rem 0 0;
+    padding-top: .8rem;
+    border-top: 1px solid var(--panel-line);
+    color: var(--panel-muted);
+    font-size: .76rem;
+    word-break: break-all;
+}
+
 .auth-foot {
     margin: 0;
     color: var(--panel-muted);
@@ -1885,4 +2000,330 @@ body.panel-page .toasts-stack {
 
     /* حالتِ بزرگ‌شده مقیاس است نه عرضِ ثابت، پس روی صفحهٔ کوچک هم نسبی
        می‌ماند (۶۴ × ۲٫۲ ≈ ۱۴۱ پیکسل) و به قاعدهٔ جدا نیازی نیست. */
+}
+
+/* =====================================================================
+   صفحهٔ دانلودِ اپلیکیشن (/app)
+   =====================================================================
+   همان پوستهٔ صفحهٔ حضور؛ فقط محتوای این صفحه کارت‌های بلندِ خواندنی است،
+   نه شبکهٔ کارتِ همکاران. پس عرض را محدود می‌کنیم تا سطرهای راهنما روی
+   نمایشگرِ بزرگ به یک خطِ ۲۰۰۰ پیکسلی تبدیل نشوند. */
+
+.app-dl {
+    width: 100%;
+    max-width: 1080px;
+    margin: 0 auto;
+}
+
+/* --- هدرِ صفحه: متن + QR --- */
+
+.app-dl-hero {
+    display: flex;
+    align-items: center;
+    gap: 1.6rem;
+    flex-wrap: wrap;
+    padding: 1.6rem;
+    border: 1px solid var(--panel-line);
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 10px 30px rgba(16, 35, 26, .06);
+}
+
+.app-dl-hero-text {
+    flex: 1 1 380px;
+    min-width: 0;
+}
+
+.app-dl-kicker {
+    display: inline-block;
+    margin-bottom: .5rem;
+    padding: .18rem .6rem;
+    border-radius: 999px;
+    background: var(--panel-link-soft);
+    color: var(--panel-link);
+    font-size: .74rem;
+    font-weight: 600;
+}
+
+.app-dl-hero h1 {
+    margin: 0 0 .6rem;
+    color: var(--panel-ink);
+    font-size: 1.55rem;
+    font-weight: 700;
+}
+
+.app-dl-lead {
+    margin: 0 0 1.1rem;
+    color: var(--panel-muted);
+    font-size: .93rem;
+    line-height: 2;
+}
+
+.app-dl-actions {
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    flex-wrap: wrap;
+}
+
+.app-dl-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .68rem 1.3rem;
+    border: 1px solid var(--panel-link);
+    border-radius: 10px;
+    background: var(--panel-link);
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 700;
+    text-decoration: none;
+    transition: background-color .18s ease, border-color .18s ease;
+}
+
+.app-dl-btn:hover,
+.app-dl-btn:focus {
+    background: var(--panel-link-strong);
+    border-color: var(--panel-link-strong);
+    color: #fff;
+    text-decoration: none;
+}
+
+.app-dl-secondary {
+    color: var(--panel-link);
+    font-size: .86rem;
+    text-decoration: none;
+    border-bottom: 1px dashed var(--panel-link);
+    padding-bottom: 1px;
+}
+
+.app-dl-secondary:hover,
+.app-dl-secondary:focus {
+    color: var(--panel-link-strong);
+    text-decoration: none;
+}
+
+.app-dl-meta {
+    margin: .9rem 0 0;
+    color: var(--panel-muted);
+    font-size: .78rem;
+}
+
+/* یادداشتِ کوچک زیرِ دکمهٔ دانلود: چه انتظاری از شروعِ خودکارِ دانلود داشته
+   باشند و هشدارِ استانداردِ «فایل مضر است» اندروید چیست. */
+.app-dl-note {
+    margin: .7rem 0 0;
+    color: var(--panel-muted);
+    font-size: .76rem;
+    line-height: 1.9;
+}
+
+.app-dl-warning {
+    padding: .8rem 1rem;
+    border: 1px solid #f0d9a8;
+    border-radius: 10px;
+    background: #fdf6e6;
+    color: #7a5a11;
+    font-size: .86rem;
+    line-height: 1.9;
+}
+
+/* --- جعبهٔ QR --- */
+
+.app-dl-qr {
+    flex: 0 0 auto;
+    width: 260px;
+    max-width: 100%;
+    text-align: center;
+}
+
+.app-dl-qr-box {
+    width: 236px;
+    height: 236px;
+    margin: 0 auto;
+    padding: 10px;
+    border: 1px solid var(--panel-line);
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 6px 20px rgba(16, 35, 26, .12);
+}
+
+.app-dl-qr-box canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    /* پیش از رسم، مربعِ سفیدِ خالی بهتر از کادرِ سیاه است. */
+    background: #fff;
+    border-radius: 6px;
+}
+
+.app-dl-qr-caption {
+    margin: .7rem 0 .35rem;
+    color: var(--panel-muted);
+    font-size: .78rem;
+    line-height: 1.8;
+}
+
+.app-dl-qr-url {
+    display: block;
+    padding: .3rem .4rem;
+    border-radius: 6px;
+    background: #f4f7f5;
+    color: var(--panel-link);
+    font-size: .72rem;
+    direction: ltr;
+    word-break: break-all;
+}
+
+/* --- کارتِ «قبل از هر چیز» --- */
+
+.app-dl-callout {
+    margin-top: 1.2rem;
+    padding: 1.2rem 1.4rem;
+    border: 1px solid #d7e8dd;
+    border-inline-start: 4px solid var(--panel-accent);
+    border-radius: 12px;
+    background: #f6fbf8;
+}
+
+.app-dl-callout h2 {
+    margin: 0 0 .6rem;
+    color: var(--panel-ink);
+    font-size: 1.06rem;
+    font-weight: 700;
+}
+
+.app-dl-callout p {
+    margin: 0 0 .6rem;
+    color: var(--panel-ink);
+    font-size: .9rem;
+    line-height: 2;
+}
+
+.app-dl-callout-note {
+    margin-bottom: 0 !important;
+    color: var(--panel-muted) !important;
+    font-size: .84rem !important;
+}
+
+/* --- قدم‌ها --- */
+
+.app-dl-steps {
+    margin-top: 1.6rem;
+}
+
+.app-dl-steps > h2,
+.app-dl-faq > h2 {
+    margin: 0 0 .9rem;
+    color: var(--panel-ink);
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+.app-dl-step-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: .8rem;
+}
+
+.app-dl-step {
+    display: flex;
+    align-items: flex-start;
+    gap: .9rem;
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--panel-line);
+    border-radius: 12px;
+    background: #fff;
+}
+
+.app-dl-step-num {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--panel-link-soft);
+    color: var(--panel-link);
+    font-size: .9rem;
+    font-weight: 700;
+}
+
+.app-dl-step h3 {
+    margin: 0 0 .35rem;
+    color: var(--panel-ink);
+    font-size: .97rem;
+    font-weight: 700;
+}
+
+.app-dl-step p {
+    margin: 0;
+    color: var(--panel-muted);
+    font-size: .87rem;
+    line-height: 2;
+}
+
+.app-dl-inline-note {
+    margin-top: .5rem !important;
+    padding: .5rem .7rem;
+    border-radius: 8px;
+    background: #f4f7f5;
+    color: var(--panel-ink) !important;
+    font-size: .84rem !important;
+}
+
+/* --- پرسش‌های پرتکرار --- */
+
+.app-dl-faq {
+    margin: 1.6rem 0 .6rem;
+}
+
+.app-dl-faq dl {
+    margin: 0;
+    padding: 1.1rem 1.3rem;
+    border: 1px solid var(--panel-line);
+    border-radius: 12px;
+    background: #fff;
+}
+
+.app-dl-faq dt {
+    margin-top: .9rem;
+    color: var(--panel-ink);
+    font-size: .9rem;
+    font-weight: 600;
+}
+
+.app-dl-faq dt:first-child {
+    margin-top: 0;
+}
+
+.app-dl-faq dd {
+    margin: .3rem 0 0;
+    color: var(--panel-muted);
+    font-size: .86rem;
+    line-height: 2;
+}
+
+/* --- صفحهٔ کوچک --- */
+
+@media (max-width: 767.98px) {
+    .app-dl-hero {
+        flex-direction: column-reverse;
+        text-align: center;
+    }
+
+    .app-dl-actions {
+        justify-content: center;
+    }
+
+    .app-dl-qr {
+        width: 100%;
+    }
+
+    .app-dl-step {
+        gap: .7rem;
+    }
 }

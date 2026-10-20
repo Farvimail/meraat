@@ -11,6 +11,7 @@ import {
   Banner,
   BrandBoot,
   Card,
+  HERO_ACTION_SIZE,
   HeroHeader,
   MenuSheet,
   ProfileSheet,
@@ -200,7 +201,7 @@ export default function DashboardScreen() {
   const running = today.present;
 
   /**
-   * قفلِ دکمهٔ ثبت تا تأییدِ حضورِ امروز.
+   * قفلِ دکمهٔ ثبت تا تأییدِ همین ثبت.
    *
    * قاعده در سرور اجرا می‌شود (`presence_required`)؛ اینجا فقط نشان داده
    * می‌شود. ضربهٔ دکمه در این حالت بی‌جواب نمی‌ماند: همان اسکنر باز می‌شود —
@@ -240,8 +241,11 @@ export default function DashboardScreen() {
       ? 'هنوز ثبتی برای امروز انجام نشده'
       : 'جمع کارکرد امروز';
 
+  // `flushTop`: سرصفحه از زیرِ نوار وضعیت شروع می‌شود تا لکهٔ نوریِ گوشهٔ بالا
+  // پشتِ ساعت ادامه پیدا کند، نه اینکه با خطِ صاف بریده شود — همان قراردادِ
+  // صفحهٔ ورود.
   return (
-    <Screen topColor={colors.brandDeep} backgroundColor={colors.white}>
+    <Screen topColor={colors.brandDeep} backgroundColor={colors.white} flushTop>
       <StatusBar style="light" />
 
       <HeroHeader
@@ -260,6 +264,10 @@ export default function DashboardScreen() {
       <MenuSheet
         visible={menuOpen}
         onClose={() => setMenuOpen(false)}
+        // جای کارتِ منو از همان محاسبه‌ای می‌آید که جای دکمهٔ سه‌خط را می‌سازد:
+        // حاشیهٔ نوار وضعیت + حاشیهٔ بالای سرصفحه + قدِ خودِ دکمه + کمی فاصله.
+        // عددِ ثابتِ قبلی (۷۶) فقط برای یک گوشیِ مشخص درست بود.
+        anchorTop={insets.top + spacing.md + HERO_ACTION_SIZE + spacing.sm}
         items={[
           {
             // عکسِ پروفایل از دو جا در دسترس است: همین سطر، و ضربه روی خودِ
@@ -334,7 +342,11 @@ export default function DashboardScreen() {
               <View style={styles.presenceHead}>
                 <Text style={styles.cardTitle}>تأیید حضور</Text>
 
-                {presence.confirmed ? (
+                {/* نشانِ «تأیید شده» فقط وقتی معنی دارد که همان تأیید هنوز
+                    برای ثبتِ بعدی خرج نشده باشد. بعد از هر ثبت (ورود یا خروج)،
+                    تأیید مصرف می‌شود و ثبتِ بعدی دوباره اسکن می‌خواهد؛ آنجا نشان
+                    خاموش می‌شود و جملهٔ زیرش می‌گوید چه کار کند. */}
+                {presence.pending ? (
                   <View style={styles.presenceBadge}>
                     <MaterialCommunityIcons name="check-circle-outline" size={14} color={colors.brand} />
                     <Text style={styles.presenceBadgeLabel}>تأیید شده</Text>
@@ -459,7 +471,9 @@ export default function DashboardScreen() {
         />
 
         {/* تذکر زیرِ دکمه: وقتی ثبت قفل است، جایش را "چرا" و "چه کنم" می‌گیرد؛
-            متنِ اثر انگشت آنجا گمراه‌کننده بود (کاربر انگشت می‌زد و ثبتی نمی‌شد). */}
+            متنِ اثر انگشت آنجا گمراه‌کننده بود (کاربر انگشت می‌زد و ثبتی نمی‌شد).
+            این قفل یکسان برای ورود و خروج است: سرور برای هر دو تأییدِ تازه
+            می‌خواهد، پس خروج هم اول اسکن QR، بعد اثرِ انگشت. */}
         <Text style={styles.hint}>
           {punchLocked
             ? PUNCH_LOCK_NOTE
