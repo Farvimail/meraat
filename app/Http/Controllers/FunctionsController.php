@@ -467,7 +467,9 @@ class FunctionsController extends Controller
         header('Access-Control-Allow-Origin: *');
         header('Access-Control-Allow-Methods: POST, GET, OPTIONS, PUT, DELETE');
 
-        $request->validate([
+        // در لاراول ۵٫۶ `validate` روی Request نیست؛ `$request->validate`
+        // استثنای `BadMethodCall` می‌داد و هر آپلود از پنل وب با ۵۰۰ می‌افتاد.
+        $this->validate($request, [
             'file' => 'required|mimes:jpeg,png,jpg,gif,svg|max:20480',
         ]);
 

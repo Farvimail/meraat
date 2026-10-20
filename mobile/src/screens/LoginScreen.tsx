@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -19,6 +20,7 @@ import {
   Card,
   Field,
   HeroGlows,
+  HeroStatusFade,
   InfoRow,
   PrimaryButton,
   Screen,
@@ -45,6 +47,7 @@ import { colors, radius, shadow, spacing } from '../theme';
 export default function LoginScreen() {
   // همان واکنشِ صفحهٔ اصلی به کشیدنِ انگشت: لکه‌های این سرصفحه هم هل می‌خورند.
   const glows = useHeroGlow();
+  const insets = useSafeAreaInsets();
   const { signIn, busy, error, clearError, connection, checkConnection } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -118,7 +121,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <Screen topColor={colors.brandDeep}>
+    <Screen topColor={colors.brandDeep} flushTop>
       <StatusBar style="light" />
 
       <KeyboardAvoidingView
@@ -127,8 +130,13 @@ export default function LoginScreen() {
       >
         {/* سرصفحه بیرون از ناحیهٔ اسکرول است تا هنگام باز شدن کیبورد جابه‌جا
             نشود؛ همان کاری که صفحهٔ اصلی با سرصفحه‌اش می‌کند. */}
-        <View ref={glows.ref} style={styles.hero} {...glows.handlers}>
+        <View
+          ref={glows.ref}
+          style={[styles.hero, { paddingTop: insets.top + spacing.md }]}
+          {...glows.handlers}
+        >
           <HeroGlows push={glows.pushed} />
+          <HeroStatusFade height={insets.top} />
 
           <BrandMark size={44} />
           <Text style={styles.heroName}>مِرآت</Text>
@@ -258,11 +266,14 @@ const styles = StyleSheet.create({
     // ارتفاعش حدود ۳۰٪ کمتر از قبل است (همان تغییری که سرصفحهٔ صفحهٔ اصلی
     // گرفت): فاصله‌های خالی جمع شده‌اند تا فرمِ ورود زودتر به چشم بیاید و
     // کاربر مجبور نباشد برای دیدن دکمهٔ ورود اسکرول کند.
+    //
+    // `paddingTop` اینجا نیست و در رندر ست می‌شود: سرصفحه از زیرِ نوار وضعیت
+    // شروع می‌شود، پس فاصلهٔ بالایش باید همان ارتفاعِ نوار وضعیت + یک نفسِ
+    // کوتاه باشد و این عدد را فقط `useSafeAreaInsets` می‌داند.
     backgroundColor: colors.brandDeep,
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
     paddingBottom: spacing.lg,
     borderBottomLeftRadius: radius.xl,
     borderBottomRightRadius: radius.xl,
@@ -309,6 +320,11 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   cardTitle: {
+    // `alignSelf` + `textAlign` صریح: تیتر در ستونِ کارت به‌طور پیش‌فرض به
+    // اندازهٔ متن جمع می‌شد و «چپْ‌چین» دیده می‌شد. حالا تمامِ عرضِ کارت را
+    // می‌گیرد و از راست شروع می‌کند، مثلِ بقیهٔ متن‌های فارسیِ صفحه.
+    alignSelf: 'stretch',
+    textAlign: 'right',
     fontSize: 14,
     fontWeight: '700',
     color: colors.ink,

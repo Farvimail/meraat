@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import type { StyleProp, TextInputProps, ViewStyle } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GLOW_MAX } from '../lib/glow';
 import type { Point } from '../lib/glow';
@@ -33,6 +33,15 @@ import { DriftGlow, PulseHalo, useGlowPush } from './motion';
 
 /** مسیر ثابت و نسبی لازم است تا Metro تصویر را در زمان باندل پیدا کند. */
 const LOGO_MARK = require('../../assets/logo.png');
+
+/**
+ * قدِ دکمهٔ گوشهٔ سرصفحه (منوی صفحهٔ اصلی و بازگشتِ صفحهٔ سابقه).
+ *
+ * این عدد فقط برای استایل نیست: صفحه‌ای که منوی بازشو دارد باید جایِ کارتِ
+ * منو را از زیرِ همین دکمه حساب کند، وگرنه کارت روی دکمه می‌نشیند. پس همین
+ * یک عدد منبعِ مشترکِ هر دو جا است.
+ */
+export const HERO_ACTION_SIZE = 38;
 
 /**
  * مرکزِ دو لکهٔ نوریِ سرصفحه، در مختصات نرمالِ کادر (۰ تا ۱).
@@ -127,6 +136,41 @@ export function HeroGlows({ push }: { push?: GlowPush }) {
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
 /**
+ * نوارِ محوکنندهٔ زیرِ نوار وضعیت — مشترک بین همهٔ سرصفحه‌های سبز.
+ *
+ * این سرصفحه‌ها با `flushTop` از زیرِ نوار وضعیت شروع می‌شوند تا لکهٔ نوریِ
+ * گوشهٔ بالا دیگر با یک خطِ صاف بریده نشود و آرام زیرِ ساعت و آیکون‌های گوشی
+ * ادامه پیدا کند. ولی همان لکه دقیقاً پشتِ نوشته‌های نوار وضعیت می‌افتد؛ این
+ * نوار با چند نوارِ باریکِ هم‌رنگِ سرصفحه که شفافیتشان از بالا به پایین کم
+ * می‌شود همان کارِ یک بلورِ ملایم را می‌کند — بدونِ افزودنِ `expo-blur` و یک
+ * وابستگیِ نیتیوِ تازه که با هر بیلد باید نصب شود.
+ */
+const STATUS_FADE_STEPS = 12;
+
+export function HeroStatusFade({ height }: { height: number }) {
+  if (height <= 0) return null;
+
+  const step = height / STATUS_FADE_STEPS;
+
+  return (
+    <View pointerEvents="none" style={[styles.statusFade, { height }]}>
+      {Array.from({ length: STATUS_FADE_STEPS }, (_, index) => (
+        <View
+          key={index}
+          style={{
+            height: step,
+            backgroundColor: colors.brandDeep,
+            // از ۸۰٪ شروع می‌شود نه ۱۰۰٪: نوار خوانا می‌شود ولی شکلِ لکه
+            // زیرش کامل پاک نمی‌شود.
+            opacity: 0.8 - (index / (STATUS_FADE_STEPS - 1)) * 0.8,
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
+/**
  * قالب صفحه.
  *
  * نوار وضعیت بالای صفحه با `topColor` رنگ می‌شود تا صفحهٔ داشبورد سبز یکدست
@@ -137,14 +181,26 @@ export function Screen({
   children,
   topColor = colors.bg,
   backgroundColor,
+  flushTop = false,
 }: {
   children: ReactNode;
   topColor?: string;
   /** رنگ زمینهٔ محتوا؛ پیش‌فرض خاکستریِ پالت است. */
   backgroundColor?: string;
+  /**
+   * محتوا از زیرِ نوار وضعیت شروع شود (بدون حاشیهٔ امنِ بالا).
+   *
+   * فقط صفحه‌هایی سراغش می‌روند که خودشان بالایشان را می‌پوشانند و حاشیهٔ
+   * وضعیت را از `useSafeAreaInsets` می‌گیرند — مثلِ سرصفحهٔ صفحهٔ ورود، که
+   * می‌خواهد لکهٔ نوری‌اش پشتِ ساعت و آیکون‌های گوشی ادامه پیدا کند.
+   */
+  flushTop?: boolean;
 }) {
   return (
-    <SafeAreaView style={[styles.screen, { backgroundColor: topColor }]} edges={['top']}>
+    <SafeAreaView
+      style={[styles.screen, { backgroundColor: topColor }]}
+      edges={flushTop ? [] : ['top']}
+    >
       <View style={[styles.screenContent, backgroundColor ? { backgroundColor } : null]}>
         {children}
       </View>
@@ -259,10 +315,19 @@ export function HeroHeader({
   onMenu: () => void;
 }) {
   const { ref, handlers, pushed } = useHeroGlow();
+  const insets = useSafeAreaInsets();
 
   return (
-    <View ref={ref} style={styles.hero} {...handlers}>
+    <View
+      ref={ref}
+      // `paddingTop` اینجا ست می‌شود نه در استایل: سرصفحه از زیرِ نوار وضعیت
+      // شروع می‌شود، پس فاصلهٔ بالایش باید همان ارتفاعِ نوار وضعیت + یک نفسِ
+      // کوتاه باشد و این عدد را فقط `useSafeAreaInsets` می‌داند.
+      style={[styles.hero, { paddingTop: insets.top + spacing.md }]}
+      {...handlers}
+    >
       <HeroGlows push={pushed} />
+      <HeroStatusFade height={insets.top} />
 
       {/* نام و سمتِ کارمند دیگر اینجا نیست — همان پایین، زیر عکس پروفایل،
           بزرگ‌تر و کامل‌تر نوشته می‌شود. جای این کادر، هویتِ اپ می‌نشیند تا
@@ -326,10 +391,17 @@ export function AppHeader({
   onBack?: () => void;
 }) {
   const { ref, handlers, pushed } = useHeroGlow();
+  const insets = useSafeAreaInsets();
 
   return (
-    <View ref={ref} style={styles.appHero} {...handlers}>
+    <View
+      ref={ref}
+      // همان قراردادِ سرصفحهٔ صفحهٔ اصلی: فاصلهٔ بالا از `insets` می‌آید.
+      style={[styles.appHero, { paddingTop: insets.top + spacing.md }]}
+      {...handlers}
+    >
       <HeroGlows push={pushed} />
+      <HeroStatusFade height={insets.top} />
 
       <View style={styles.heroTop}>
         <View style={styles.heroBrand}>
@@ -666,7 +738,15 @@ export function TimerDisplay({
   );
 }
 
-/** یک ردیف از نوار «امنیت» — آیکون، عنوان و وضعیت. */
+/**
+ * یک ردیف از نوار «امنیت» — آیکون، عنوان و وضعیت.
+ *
+ * چیدمانش عمداً به `flexDirection` تکیه نمی‌کند: اپ روی بعضی گوشی‌ها با
+ * جهتِ نیتیوِ راست‌به‌چپ بالا می‌آید و آن‌جا `row-reverse` یک‌بارِ دیگر برعکس
+ * می‌شود — نتیجه ردیفی بود که آیکونش به چپ می‌پرید. این‌جا آیکون با `right`
+ * (فیزیکی، مستقل از جهتِ چیدمان) به گوشهٔ راست سنجاق می‌شود و عنوان و مقدار
+ * در یک متنِ راست‌چین می‌نشینند، پس در هر دو جهت یک‌شکل دیده می‌شود.
+ */
 export function InfoRow({
   icon,
   label,
@@ -682,12 +762,12 @@ export function InfoRow({
 
   return (
     <View style={styles.infoRow}>
-      <MaterialCommunityIcons name={icon} size={17} color={fg} />
-      <Text style={styles.infoLabel} numberOfLines={1}>
+      <MaterialCommunityIcons name={icon} size={17} color={fg} style={styles.infoIcon} />
+
+      <Text style={styles.infoText} numberOfLines={1}>
         {label}
-      </Text>
-      <Text style={[styles.infoValue, { color: fg }]} numberOfLines={1}>
-        {value}
+        {'  '}
+        <Text style={[styles.infoValue, { color: fg }]}>{value}</Text>
       </Text>
     </View>
   );
@@ -757,10 +837,20 @@ export function MenuSheet({
   visible,
   items,
   onClose,
+  anchorTop = 76,
 }: {
   visible: boolean;
   items: MenuItem[];
   onClose: () => void;
+  /**
+   * فاصلهٔ کارتِ منو از لبهٔ بالای صفحه.
+   *
+   * این عدد را صفحهٔ صاحبِ منو می‌دهد، نه خودِ قطعه: کارت باید درست زیرِ
+   * دکمهٔ سه‌خط بنشیند و جایِ آن دکمه از ارتفاعِ نوار وضعیتِ همان گوشی
+   * می‌آید (`insets.top`). عددِ ثابتِ پیش‌فرض فقط برای حالتی است که کسی
+   * این prop را ندهد.
+   */
+  anchorTop?: number;
 }) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -771,7 +861,7 @@ export function MenuSheet({
         style={styles.menuBackdrop}
       >
         {/* کارتِ منو خودش Pressable است تا ضربهٔ روی سطرها به پس‌زمینه نرسد. */}
-        <Pressable style={styles.menuCard} onPress={() => undefined}>
+        <Pressable style={[styles.menuCard, { top: anchorTop }]} onPress={() => undefined}>
           {items.map((item, index) => (
             <Pressable
               key={item.key}
@@ -1011,6 +1101,8 @@ const styles = StyleSheet.create({
     /* ارتفاع سرصفحه عمداً حدود ۳۰٪ کمتر از قبل است: عددها و ترتیبِ خودش
        (نشان + ساعت) عوض نشده، فقط فاصله‌های خالی جمع شده‌اند. کادرِ بلند،
        محتوا را به پایینِ صفحه هل می‌داد و کاربر اول باید اسکرول می‌کرد. */
+    // `paddingTop` جای پیش‌فرض است؛ خودِ سرصفحه آن را با ارتفاعِ نوار وضعیت
+    // جایگزین می‌کند (`insets.top + spacing.md`) تا از زیرِ ساعت شروع شود.
     paddingTop: spacing.sm,
     paddingBottom: spacing.lg,
     borderBottomLeftRadius: radius.xl,
@@ -1018,6 +1110,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     gap: spacing.md,
     ...shadow.header,
+  },
+  // نوارِ محوکنندهٔ نوار وضعیت: روی لکه‌ها می‌نشیند و شفافیتش رو به پایین صفر
+  // می‌شود (ارتفاعش را خودِ سرصفحه می‌دهد).
+  statusFade: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
   },
   // لکه‌ها دو لایه دارند: این‌ها فقط جای نشستن‌اند (ویوی بیرونی، همان که با
   // انگشت هل داده می‌شود) و رنگ و گردی روی لایهٔ داخلی است (`heroGlow*Paint`).
@@ -1075,8 +1175,8 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
   },
   heroAction: {
-    width: 38,
-    height: 38,
+    width: HERO_ACTION_SIZE,
+    height: HERO_ACTION_SIZE,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1121,6 +1221,7 @@ const styles = StyleSheet.create({
     // همان قالبِ سرصفحهٔ اصلی — فقط دو سطرِ هویت/جمع در پایینش هست.
     backgroundColor: colors.brandDeep,
     paddingHorizontal: spacing.lg,
+    // جای پیش‌فرض؛ خودِ سرصفحه آن را با ارتفاعِ نوار وضعیت جایگزین می‌کند.
     paddingTop: spacing.sm,
     paddingBottom: spacing.lg,
     borderBottomLeftRadius: radius.xl,
@@ -1203,10 +1304,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(6, 22, 14, 0.55)',
   },
   menuCard: {
+    // `top` فقط پیش‌فرض است — سرصفحه حالا تا زیرِ نوار وضعیت ادامه دارد، پس
+    // جای دکمه ثابت نیست و صفحهٔ صاحبِ منو با `anchorTop` می‌نویسدش.
     // جای ثابت و فیزیکی (`top`/`left`) عمدی است: در چیدمانِ راست‌به‌چپ،
     // `alignItems: 'flex-start'` جای دکمهٔ سه‌خط (گوشهٔ چپ) را نمی‌دهد.
     position: 'absolute',
-    top: 76,
     left: spacing.lg,
     minWidth: 236,
     backgroundColor: colors.white,
@@ -1435,19 +1537,26 @@ const styles = StyleSheet.create({
   },
 
   infoRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: spacing.sm,
+    // ارتفاعِ کمینه جای آیکونِ سنجاق‌شده را نگه می‌دارد؛ بدونِ `flexDirection`
+    // که در چیدمانِ راست‌به‌چپِ نیتیو برعکس می‌شود.
+    minHeight: 21,
+    justifyContent: 'center',
+    // گوشهٔ راست برای آیکون: ۱۷ خودِ آیکون + ۸ فاصله.
+    paddingRight: 25,
   },
-  infoLabel: {
-    flex: 1,
+  infoIcon: {
+    position: 'absolute',
+    right: 0,
+  },
+  infoText: {
+    // `textAlign` صریح است، نه `auto`: تیترِ کوتاه در حالتِ `auto` به لبهٔ چپِ
+    // فضای آزادش می‌چسبید.
+    textAlign: 'right',
     fontSize: 13,
     color: colors.muted,
     writingDirection: 'rtl',
   },
   infoValue: {
-    // مقدار کوتاه است و باید یک‌خطی بماند؛ اگر جایی جا نشد، کوتاه می‌شود نه خط‌شکن.
-    flexShrink: 1,
     fontSize: 13,
     fontWeight: '700',
     writingDirection: 'rtl',

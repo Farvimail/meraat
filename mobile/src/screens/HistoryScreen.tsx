@@ -54,8 +54,10 @@ export default function HistoryScreen({ onBack }: { onBack: () => void }) {
     [days],
   );
 
+  // `flushTop` + سرصفحهٔ زیرِ نوار وضعیت: همان قراردادِ صفحهٔ ورود و صفحهٔ اصلی
+  // تا لکهٔ نوریِ گوشهٔ بالا پشتِ ساعت ادامه پیدا کند و سه صفحه یک‌شکل باشند.
   return (
-    <Screen topColor={colors.brandDeep} backgroundColor={colors.white}>
+    <Screen topColor={colors.brandDeep} backgroundColor={colors.white} flushTop>
       <StatusBar style="light" />
 
       <AppHeader
