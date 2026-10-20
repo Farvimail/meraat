@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "مِرآت حضور",
+    "name": "مِرآت",
     "slug": "meraat-attendance",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -12,6 +12,7 @@
     },
     "android": {
       "package": "ir.piqagram.meraat.attendance",
+      "versionCode": 2,
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/android-icon-foreground.png",

@@ -2,15 +2,15 @@
     پوستهٔ صفحهٔ حضور و غیاب (صفحهٔ اصلی سایت).
 
     همان بدنهٔ داشبورد پنل (body.panel-page + panel.css) اما بدون نوار کناری:
-    هدر چسبان بالا، سربرگ‌های سریع به بخش‌های همین صفحه، کنترل تاریخ فعال
-    سامانه و خروج/ورود مدیر. بخش‌ها با همان @yieldهای پنل، پس نمایه‌های موجود
-    بدون تغییر باقی می‌مانند.
+    هدر چسبان بالا، سربرگ‌های سریع به بخش‌های همین صفحه و کنترل تاریخ فعال
+    سامانه. بخش‌ها با همان @yieldهای پنل، پس نمایه‌های موجود بدون تغییر باقی
+    می‌مانند.
+
+    دکمهٔ «پنل مدیریت» و «خروج» عمداً از این هدر برداشته شدند: این صفحه محلِ
+    کارِ روزمرهٔ کارکنان است، نه میزکارِ مدیر. مدیر از `/manager/login` وارد
+    می‌شود و پسوردش را هم از همان‌جا عوض می‌کند. جای آن‌ها دکمهٔ «اپلیکیشن»
+    نشسته که صفحهٔ دانلود و QR آن را باز می‌کند.
 --}}
-@php
-    $attUser = auth('manager')->user() ?: auth('admin')->user();
-    $attRole = auth('manager')->check() ? 'میزکار' : (auth('admin')->check() ? 'مدیر ارشد' : null);
-    $attInitial = $attUser ? mb_substr($attUser->name ?: $attUser->email, 0, 1) : '';
-@endphp
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}" dir="rtl">
 <head>
@@ -68,37 +68,40 @@
             </span>
         </div>
 
+        @php
+            /*
+             * صفحه‌هایی مثل `/app` بخش‌های #customers و #calendars را ندارند؛
+             * در آن‌ها یک لینکِ لنگری (`#customers`) به هیچ عنصری نمی‌رسد و
+             * کلیکش هیچ کاری نمی‌کند. آن صفحه‌ها با `nav_base` نشانیِ صفحهٔ
+             * اصلی را می‌دهند تا سربرگ به همان بخش‌ها برگردد.
+             */
+            $navBase = trim($__env->yieldContent('nav_base'));
+        @endphp
         <nav class="att-nav" aria-label="بخش‌های صفحه">
-            <a class="att-nav-link is-active" href="#customers">همکاران</a>
-            <a class="att-nav-link" href="#calendars">فعالیت ماهانه</a>
+            <a class="att-nav-link{{ $navBase === '' ? ' is-active' : '' }}"
+               href="{{ $navBase }}#customers">همکاران</a>
+            <a class="att-nav-link" href="{{ $navBase }}#calendars">فعالیت ماهانه</a>
         </nav>
 
         <div class="att-topbar-end">
+            {{-- دکمهٔ اپ: صفحهٔ جداگانه‌ای را باز می‌کند که QRِ لینکِ دانلود
+                 مستقیم از همین سرور را دارد، همراهِ راهنمای نصب و استفاده. --}}
+            <a class="att-topbtn att-topbtn-app" href="{{ url('app') }}" title="دانلود اپلیکیشن و راهنمای نصب">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+                     width="16" height="16">
+                    <rect x="6" y="2" width="12" height="20" rx="3"></rect>
+                    <line x1="10" y1="18" x2="14" y2="18"></line>
+                </svg>
+                <span>اپلیکیشن</span>
+            </a>
+
             @include('partials.timer-hub-chip')
 
             @include('partials.date-jump')
 
-            @if ($attUser)
-                <a class="panel-iconbtn" href="{{ route('logout') }}" title="خروج از حساب"
-                   onclick="event.preventDefault(); document.getElementById('att-logout-form').submit();">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                        <polyline points="16 17 21 12 16 7"></polyline>
-                        <line x1="21" y1="12" x2="9" y2="12"></line>
-                    </svg>
-                </a>
-
-                @if ($attRole)
-                    {{-- کلاسِ اختصاصی و نه `btn btn-primary`: آبیِ `btn-primary`
-                         عمداً در این سامانه نگه داشته شده چون رنگِ وضعیتِ روزهای
-                         تقویم است؛ این دکمه به تقویم ربطی ندارد، پس با رنگِ خودِ
-                         پنل می‌آید. توضیح در panel.css. --}}
-                    <a class="att-topbtn"
-                       href="{{ auth('manager')->check() ? url('manager') : url('admin') }}">پنل مدیریت</a>
-                @endif
-            @else
-                <a class="btn btn-sm btn-outline-primary" href="{{ url('login/manager') }}">ورود مدیر</a>
+            @if (! auth('manager')->check() && ! auth('admin')->check())
+                <a class="att-login-link" href="{{ url('manager/login') }}">ورود مدیر</a>
             @endif
         </div>
     </div>
@@ -126,12 +129,6 @@
         <a href="https://t.me/mgh1320" target="_blank" rel="noopener">پشتیبانی تلگرام</a>
     </span>
 </footer>
-
-@if ($attUser)
-    <form id="att-logout-form" action="{{ route('logout') }}" method="POST" style="display: none;">
-        @csrf
-    </form>
-@endif
 
 <script>
     (function () {

@@ -70,6 +70,8 @@ tar czf "$ARCHIVE" \
     --exclude=./node_modules \
     --exclude=./mobile/node_modules \
     --exclude=./mobile/.expo \
+    --exclude=./mobile/keys \
+    --exclude=./mobile/release \
     --exclude=./mobile/dist \
     --exclude=./mobile/web-build \
     --exclude=./mobile/ios \

@@ -54,6 +54,10 @@ services:
       - ./.env:/var/www/html/.env:ro
       - meraat_storage:/var/www/html/storage
       - meraat_uploads:/var/www/html/public/images/users
+      # فایلِ نصبیِ اپ (صفحهٔ /app). عمداً پوشه‌ای بیرون از درختِ پروژه:
+      # deploy/push.sh با هر فرستادن، درخت را از داخل خالی می‌کند؛ اگر APK
+      # داخلِ آن بود، هر استقرار فایلِ ۵۰+ مگابایتی را پاک می‌کرد.
+      - ${MOBILE_APK_DIR:-/var/www/meraat-apk}:/var/www/html/public/apk:ro
     depends_on:
       db:
         condition: service_healthy
@@ -159,6 +163,10 @@ services:
       # if it sees the very same directory. Every other file under public/ is
       # baked into this image by Dockerfile.web, so nothing else needs mounting.
       - meraat_uploads:/var/www/html/public/images/users:ro
+      # همان پوشهٔ APK که app می‌بیند: nginx خودش فایل را می‌فرستد و ۵۰
+      # مگابایت از PHP رد نمی‌شود. اگر این mount جا بماند، لینکِ دانلود به
+      # کنترلر می‌رسد و آن هم به /app برمی‌گردد («فایل موجود نیست»).
+      - ${MOBILE_APK_DIR:-/var/www/meraat-apk}:/var/www/html/public/apk:ro
     depends_on:
       - app
     healthcheck:

@@ -37,6 +37,41 @@ server {
         try_files $uri =404;
     }
 
+    # --- فایلِ نصبیِ اندروید ------------------------------------------------
+    # اسکنِ QR باید دانلود را **بلافاصله** شروع کند، پس خودِ همین نشانی فایل
+    # را می‌فرستد، بی‌آنکه ریدایرکتی در کار باشد: خیلی از اپ‌های دوربین و
+    # اسکرِ QR ریدایرکتِ سمتِ سرور را دنبال نمی‌کنند و کاربر فقط یک صفحهٔ
+    # خالی می‌بیند و فکر می‌کند دانلود نشده است.
+    #
+    # نامِ فایل همان پیش‌فرضِ MOBILE_APK_PATH است؛ اگر مسیر عوض شده باشد، این
+    # location به صفحهٔ راهنما می‌افتد و خودِ کنترلر لینکِ درست را می‌دهد.
+    location = /app/download {
+        rewrite ^ /apk/Meraat.apk last;
+    }
+
+    location ~* \.apk$ {
+        types { application/vnd.android.package-archive apk; }
+        # کشِ بلند یعنی بعد از جایگزینیِ APK تازه، گوشی‌ها همان نسخهٔ کهنه را
+        # می‌گیرند؛ این فایل باید همیشه از سرور بیاید.
+        expires -1;
+        access_log off;
+        # پیوست، نه نمایش: مرورگر باید فایل را ذخیره کند و بازش نکند.
+        add_header Content-Disposition "attachment; filename=Meraat.apk";
+        # فایل نبود (مثلاً هنوز آپلود نشده) → صفحهٔ راهنما، نه ۴۰۴ِ خالی.
+        # ریدایرکتِ داخلی به لاراول می‌رسد و لاراول `REQUEST_URI` را همان
+        # نشانیِ قدیمیِ فایل می‌بیند و ۴۰۴ می‌دهد؛ پس با یک locationِ اسمی
+        # ریدایرکتِ **بیرونی** می‌فرستیم تا مرورگر با نشانیِ تازه به لاراول برود.
+        error_page 404 = @apk_missing;
+        try_files $uri =404;
+    }
+
+    location @apk_missing {
+        # مطلق نساز: کانتینر پشتِ TLS-ترمینالِ سرور درخواست را ساده می‌بیند و
+        # ریدایرکتِ مطلق http می‌سازد؛ نسبی، همیشه با schemeِ خودِ مرورگر درست می‌شود.
+        absolute_redirect off;
+        return 302 /app;
+    }
+
     # --- live refresh socket -------------------------------------------------
     # The panel keeps one WebSocket open here; the app posts to the hub after
     # each punch and the hub forwards "customer N changed".
