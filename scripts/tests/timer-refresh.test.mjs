@@ -15,6 +15,10 @@
     ۸) شروعِ نگهبان بعد از پایانِ بارگذاریِ صفحه، نه وسطِ آن
     ۹) چیپِ وضعیتِ کانال: «دوره‌ای» ↔ «زنده» و تعدادِ پنل‌های باز
     ۱۰) بودنِ چیپ در پارشالِ مشترک و در هر دو نوار بالا (پنل و حضور و غیاب)
+    ۱۱) کارتِ رسم‌شده با پاسخِ خالی هم در هر دو مسیرِ زنده ثبت می‌شود
+        (ثبتِ گوشی بعد از «ثبت حضور» باید بی‌رفرش در سایت دیده شود)
+    ۱۲) خطای گذرا (۵۰۲/۵۰۰) نگهبان را خاموش نمی‌کند: مکثِ روبه‌رشد تا سقف،
+        و بعد از سالم شدنِ سرور برگشت به فاصلهٔ عادی
 
   اجرا:  node scripts/tests/timer-refresh.test.mjs
 */
@@ -144,8 +148,17 @@ function sandbox() {
     ajaxCalls.push(options);
 
     if (isRevision && documentStub.__revisionFails) {
-      options.complete?.({ status: 404 }, 'error');
-      options.error?.({ status: 404 }, 'error', 'Not Found');
+      // مقدارِ عددی یعنی وضعیتِ همان خطا (۵۰۲ وسطِ استقرار)؛ `true` یعنی
+      // «این مسیر اصلاً نیست» (نسخهٔ قدیمیِ کد → ۴۰۴).
+      const status = typeof documentStub.__revisionFails === 'number'
+        ? documentStub.__revisionFails
+        : 404;
+
+      // مثلِ خودِ jQuery: اول `error` بعد `complete` — وگرنه نگهبان پیش از
+      // شنیدنِ خطا زمان‌بندی می‌شود و بررسیِ «پس از خطا چه فاصله‌ای می‌گیرد»
+      // بی‌معنا می‌شود.
+      options.error?.({ status }, 'error', status === 404 ? 'Not Found' : 'Server Error');
+      options.complete?.({ status }, 'error');
       return { done: () => ({ fail: () => undefined }), fail: () => undefined };
     }
 
@@ -517,6 +530,79 @@ const closedShift = JSON.stringify([
   );
 
   console.log('✔ چیپ در پارشالِ مشترک است و هر دو نوار بالا آن را می‌آورند');
+}
+
+// ۱۱) کارتِ رسم‌شده با پاسخِ خالی: در هر دو مسیرِ زنده ثبت می‌شود
+{
+  const app = sandbox();
+  app.clearTimers();
+  app.documentStub.__payload = '[]';   // امروز رکوردی ندارد (روزِ خالی یا رکوردهای حذف‌شده)
+
+  // خودِ صفحه کارت را رسم کرده و `runTimer` را صدا زده است.
+  runInContext('runTimer(60, "کارمند شصت", true)', app.context);
+
+  // کانالِ زنده باید همین کارت را در فهرست ببیند — وگرنه ثبتِ گوشی به این
+  // پنل نمی‌رسد و تنها راهِ دیدنش رفرشِ دستیِ صفحه می‌شود.
+  runInContext('timerHubConnect()', app.context);
+  const socket = app.sockets[0];
+  assert.ok(socket, 'برای این صفحه سوکت ساخته می‌شود');
+  socket.open();
+
+  const watch = socket.sent
+    .map((raw) => { try { return JSON.parse(raw); } catch { return null; } })
+    .find((message) => message && message.type === 'watch');
+
+  assert.ok(watch, 'با باز شدنِ سوکت باید فهرستِ کارت‌ها فرستاده شود');
+  assert.ok(
+    (watch.ids || []).map(String).indexOf('60') >= 0,
+    'پاسخِ خالی نباید کارت را از فهرستِ هاب بیندازد',
+  );
+
+  // و نگهبانِ دوره‌ای هم باید همین کارت را بپرسد؛ اولین ثبتِ گوشی که برسد
+  // عدد تازه می‌شود و پاک‌کاریِ تایمر همان لحظه انجام می‌شود.
+  app.documentStub.__payload = JSON.stringify([{ time: '08:12:00', start: 1, pause: 0 }]);
+  app.documentStub.__revisions = '{"60":"1:951"}';
+  runInContext('checkTimerRevisions()', app.context);
+
+  assert.equal(
+    app.cardReads().length, 2,
+    'اولین ثبتِ بی‌رکورد باید همان کارت را بخواند، بی‌آنکه صفحه رفرش شود',
+  );
+  assert.ok(app.intervalCount() >= 1, 'قدم‌شمارِ شیفتِ باز باید روشن شود');
+
+  console.log('✔ پاسخِ خالی هم کارت را زیر نظر نگه می‌دارد (ثبتِ گوشی بی‌رفرش دیده می‌شود)');
+}
+
+// ۱۲) خطای گذرا نگهبان را برای همیشه خاموش نمی‌کند
+{
+  const app = sandbox();
+  app.clearTimers();
+  app.documentStub.__revisions = '{"71":"0:0"}';
+  runInContext('watchTimer(71, "کارمند هفتادویک")', app.context);
+
+  runInContext('checkTimerRevisions()', app.context);
+  assert.equal(app.revisionTimers().length, 1, 'روی روالِ عادی یک تیکِ بعدی در انتظار است');
+
+  // یک ۵۰۳ میانِ استقرار — اول خطای گذرا، بعدِ تکمیل، مثلِ خودِ jQuery.
+  app.clearTimers();
+  app.documentStub.__revisionFails = 503;
+  runInContext('checkTimerRevisions()', app.context);
+  assert.equal(app.revisionTimers().length, 1, 'خطای گذرا نباید نگهبان را خاموش کند');
+  assert.equal(app.revisionTimers()[0].delay, 1000, 'اولین خطا: یک ثانیه مکث');
+
+  app.clearTimers();
+  runInContext('checkTimerRevisions()', app.context);
+  assert.equal(app.revisionTimers().length, 1, 'خطای دوم هم فقط مکث می‌دهد، نه خاموشی');
+  assert.equal(app.revisionTimers()[0].delay, 2000, 'خطای دوم: فاصله دو برابر می‌شود');
+
+  // سرور دوباره سالم شد → باید به فاصلهٔ عادی برگردد، نه اینکه تا رفرشِ دستی بخوابد.
+  app.clearTimers();
+  app.documentStub.__revisionFails = false;
+  runInContext('checkTimerRevisions()', app.context);
+  assert.equal(app.revisionTimers().length, 1, 'سلامتیِ دوباره چرخه را روشن نگه می‌دارد');
+  assert.equal(app.revisionTimers()[0].delay, 1000, 'بعد از موفقیت، فاصله به حالتِ عادی برمی‌گردد');
+
+  console.log('✔ خطای گذرا → مکثِ روبه‌رشد و برگشت به روالِ عادی، بدون خاموشیِ همیشگی');
 }
 
 console.log('\nهمهٔ بررسی‌های زمان‌بندیِ تایمرِ پنل گذشت.');

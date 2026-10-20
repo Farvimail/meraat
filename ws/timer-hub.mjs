@@ -244,7 +244,17 @@ function handleClientMessage(client, raw) {
 
     if (typeof message.dmy === 'string' && message.dmy) client.dmy = message.dmy;
 
-    if (message.ids !== undefined) client.ids = parseIds(message.ids);
+    if (message.ids !== undefined) {
+      const next = parseIds(message.ids);
+      const changed =
+        client.ids.size !== next.size || [...next].some((id) => !client.ids.has(id));
+
+      client.ids = next;
+
+      // پنل هر ثانیه همین پیام را می‌فرستد؛ فقط وقتی فهرست واقعاً عوض شده
+      // لاگ می‌شود تا با یک ثبت، دیده شود کارتِ تازه به هاب رسیده است یا نه.
+      if (changed) log('watch updated:', client.dmy || '-', next.size, 'cards —', clients.size, 'open');
+    }
   }
 }
 
@@ -467,6 +477,13 @@ const server = createServer(async (request, response) => {
             id: Number(change.id),
             revision: String(change.revision === undefined ? '' : change.revision),
           });
+
+    log(
+      'publish:', type,
+      'id=' + change.id,
+      type === 'change' ? 'rev=' + String(change.revision === undefined ? '' : change.revision) + ' dmy=' + change.dmy : '',
+      'delivered=' + delivered + '/' + clients.size,
+    );
 
     response.writeHead(200, { 'Content-Type': 'application/json' });
     response.end(JSON.stringify({ ok: true, delivered }));
