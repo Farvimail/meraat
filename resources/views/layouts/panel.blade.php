@@ -125,6 +125,19 @@
 
             <p class="panel-nav-label">حساب کاربری</p>
             <nav class="panel-nav-links">
+                {{-- فقط مدیر: تغییر رمزِ خودش. مدیر ارشد رمزش را از جای دیگری
+                     می‌گیرد و این صفحه برای گاردِ admin ساخته نشده است؛ نشان
+                     دادنِ لینکی که به صفحهٔ مدیر می‌رود، او را بیرون می‌انداخت. --}}
+                @if (auth('manager')->check())
+                    <a class="panel-nav-link" href="{{ url('manager/password') }}">
+                        <span class="panel-nav-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                                 stroke-linecap="round" stroke-linejoin="round">{!! $panelIcons['shield'] !!}</svg>
+                        </span>
+                        <span class="panel-nav-text">تغییر رمز عبور</span>
+                    </a>
+                @endif
+
                 <a class="panel-nav-link" href="{{ route('logout') }}"
                    onclick="event.preventDefault(); document.getElementById('panel-logout-form').submit();">
                     <span class="panel-nav-icon" aria-hidden="true">
@@ -168,6 +181,17 @@
                 @include('partials.timer-hub-chip')
 
                 @include('partials.date-jump')
+
+                {{-- تغییر رمزِ خودِ مدیر. در منوی کنار هم هست، ولی آن منو در
+                     موبایل پشتِ دکمهٔ کشو پنهان می‌شود؛ این میان‌بر همان کار را
+                     یک کلیک می‌کند. برای گاردِ admin ساخته نشده است، پس فقط
+                     برای نشستِ مدیر نشان داده می‌شود. --}}
+                @if (auth('manager')->check())
+                    <a class="panel-iconbtn" href="{{ url('manager/password') }}" title="تغییر رمز عبور">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{!! $panelIcons['shield'] !!}</svg>
+                    </a>
+                @endif
 
                 <a class="panel-iconbtn" href="{{ route('logout') }}" title="خروج"
                    onclick="event.preventDefault(); document.getElementById('panel-logout-form').submit();">

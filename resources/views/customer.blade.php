@@ -149,10 +149,13 @@ use App\Http\Controllers\FunctionsController;
                                                     <div class="digital-timer digital-timer-{{$item->customer_id}} cc_cursor">{{FunctionsController::e2p('00 : 00\' : 00" ')}}</div>
                                                     <progress id="timer-progress" value="100" max="100" style="display: none;"></progress>زمان سپری شده
                                                 </div>
-                                                <div class="btn-group mb-5" role="group" style="display: flex; vertical-align: middle; justify-content: center;" aria-label="Basic mixed styles example">
-                                                    <button type="button" id="timer-pause-{{$item->customer_id}}" data-name="{{$item->name}}" class="btn btn-danger col-md-5">توقف</button>
-                                                    <button type="button" id="timer-start-{{$item->customer_id}}" data-name="{{$item->name}}" class="btn btn-success col-md-5">شروع</button>
-                                                </div>
+                                                {{--
+                                                    دکمه‌های «شروع/توقف» عمداً از این صفحه برداشته شدند.
+                                                    ثبتِ تردد کارِ گوشیِ خودِ کارمند است (اپ با اثر انگشت
+                                                    و تأییدِ QR)؛ این صفحه جای دیدنِ وضعیت است، نه دکمهٔ
+                                                    ثبتِ دستی. دکمه‌ها فقط در پنل مدیر (بخشِ «کارمندها»
+                                                    در `/manager`) مانده‌اند.
+                                                --}}
                                             </div>
                                         </ul>
                                     </div>

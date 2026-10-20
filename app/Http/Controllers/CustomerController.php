@@ -97,6 +97,112 @@ class CustomerController extends Controller
     }
 
     /**
+     * تب «ویرایش» پنل مدیر: تغییر ایمیل و پسورد یک کارمند.
+     *
+     * قواعد:
+     *  - ایمیل همیشه لازم است و باید یکتا باشد (به‌جز همان کارمند).
+     *  - پسوردِ خالی یعنی «دست نزن»؛ فقط مدیری که می‌خواهد رمز را عوض کند
+     *    آن را پر می‌کند و مثل ثبت‌نام با Hash::make ذخیره می‌شود (نه متنِ خام،
+     *    و نه خالی: خالی‌کردنِ password یک کاربر را از ورود می‌انداخت).
+     */
+    public function credentials(Request $request)
+    {
+        // عمداً `$this->validate($request, ...)` و نه `$request->validate(...)`:
+        // در لاراول ۵٫۶ متدِ `validate` روی `Illuminate\Http\Request` وجود
+        // ندارد (فقط روی کنترلر، از طریقِ تریتِ `ValidatesRequests`). نسخهٔ
+        // قبلی `$request->validate` صدا می‌زد و در همین نسخه استثنای
+        // `BadMethodCall` می‌داد: هر ذخیره ۵۰۰ می‌شد و دیتابیس دست نمی‌خورد،
+        // پس بعد از رفرش همان ایمیل و رمزِ قبلی می‌ماند.
+        //
+        // پیام‌ها فارسی‌اند و صریح: خطای اعتبارسنجی هم روی همان تب نوشته
+        // می‌شود.
+        $this->validate($request, [
+            'customer_id' => 'required|integer|exists:users,id',
+            'email'       => 'required|email|unique:users,email,' . $request['customer_id'],
+            'password'    => 'nullable|string|min:6',
+        ], [
+            'customer_id.required' => 'کارمند انتخاب نشده است.',
+            'customer_id.exists'   => 'این کارمند در سامانه پیدا نشد.',
+            'email.required'       => 'ایمیل را وارد کنید.',
+            'email.email'          => 'ایمیل معتبر نیست (مثل name@example.com).',
+            'email.unique'         => 'این ایمیل قبلاً برای کارمند دیگری ثبت شده است.',
+            'password.min'         => 'رمز جدید باید حداقل ۶ کاراکتر باشد؛ رمزِ کوتاه‌تر ذخیره نمی‌شود.',
+        ]);
+
+        $update = ['email' => $request['email']];
+
+        if ( $request['password'] )
+            $update['password'] = Hash::make($request['password']);
+
+        $affected = DB::table('users')
+            ->where('id', $request['customer_id'])
+            ->update($update);
+
+        // پیامِ موفقیت ایمیلِ تازه را می‌گوید تا مدیر همان لحظه ببیند چه چیزی
+        // ذخیره شد؛ اگر هم هیچ ردیفی عوض نشد (مقدارهای تکراری)، «تغییر کرد»
+        // الکی گفته نمی‌شود.
+        $request->session()->flash(
+            'status',
+            $affected > 0
+                ? 'اطلاعات ورود ذخیره شد؛ از این به بعد با ' . $request['email'] . ' وارد شوید.'
+                : 'مقدارها همان قبلی بود و تغییری ذخیره نشد.'
+        );
+
+        return redirect()->route('desc');
+    }
+
+    /**
+     * آزاد کردن گوشیِ بسته‌شده به کارمند (دکمهٔ تبِ «ویرایش»).
+     *
+     * چرا لازم است: اپ قیدِ «یک کارمند، یک گوشی» دارد. اگر کارمند اپ را پاک و
+     * دوباره نصب کند، شناسهٔ نصب عوض می‌شود و ورودِ بعدی با ۴۰۹
+     * (`device_already_bound`) رد می‌شود — پیامِ خودِ اپ هم می‌گوید «با مدیر
+     * تماس بگیرید»، ولی تا حالا مدیر هیچ دکمه‌ای برای این کار نداشت و فقط
+     * دستورِ `php artisan mobile:release` روی سرور جوابش بود.
+     *
+     * منطقش دقیقاً همان دستور است: گوشی آزاد می‌شود (`released_at`) و
+     * توکن‌های همان گوشی هم باطل می‌شوند؛ وگرنه نشستِ بازِ گوشیِ قبلی تا
+     * وقتی خودش خارج نشود معتبر می‌ماند.
+     */
+    public function releaseDevice(Request $request)
+    {
+        // همان دلیلی که در `credentials()` توضیح داده شد: در لاراول ۵٫۶
+        // `validate` روی Request نیست و `$request->validate` این متد را با
+        // ۵۰۰ می‌انداخت، یعنی دکمهٔ «آزاد کردن گوشی» هرگز کار نمی‌کرد.
+        $this->validate($request, [
+            'customer_id' => 'required|integer|exists:users,id',
+        ]);
+
+        $now = date('Y-m-d H:i:s');
+
+        $devices = DB::table('tbl_mobile_device')
+            ->where('customer_id', $request['customer_id'])
+            ->whereNull('released_at')
+            ->get();
+
+        foreach ($devices as $device)
+        {
+            DB::table('tbl_mobile_device')
+                ->where('id', $device->id)
+                ->update(['released_at' => $now]);
+
+            DB::table('tbl_mobile_token')
+                ->where('device_id', $device->device_id)
+                ->whereNull('revoked_at')
+                ->update(['revoked_at' => $now]);
+        }
+
+        $request->session()->flash(
+            'status',
+            $devices->isEmpty()
+                ? 'گوشیِ فعالی برای این کارمند نبود'
+                : 'گوشی آزاد شد؛ کارمند می‌تواند از گوشی جدید وارد شود'
+        );
+
+        return redirect()->route('desc');
+    }
+
+    /**
      * انتقال کارمند به آرشیو.
      *
      * کارمند آرشیوشده از فهرست «کارمندها» (و در نتیجه از کارت‌های تایمر و

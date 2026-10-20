@@ -95,6 +95,31 @@ class AppendCustomerController extends Controller
         return $cached[$key] = $customers;
     }
 
+    /**
+     * گوشیِ فعالِ (هنوز آزادنشدهٔ) یک کارمند — برای تبِ «ویرایش» پنل.
+     *
+     * چرا لازم است: قیدِ «یک کارمند، یک گوشی» وقتی اپ پاک و دوباره نصب شود
+     * (شناسهٔ نصب عوض می‌شود) یا گوشی عوض شود، ورودِ بعدی را با
+     * `device_already_bound` رد می‌کند. تا امروز تنها راهِ باز کردنش دستورِ
+     * `php artisan mobile:release` روی سرور بود؛ حالا مدیر همان کار را از
+     * خودِ کارتِ کارمند می‌کند و اینجا فقط وضعیت نمایش داده می‌شود.
+     */
+    public static function activeDevice($id)
+    {
+        static $cache = array();
+
+        if (array_key_exists($id, $cache))
+        {
+            return $cache[$id];
+        }
+
+        return $cache[$id] = DB::table('tbl_mobile_device')
+            ->where('customer_id', $id)
+            ->whereNull('released_at')
+            ->orderBy('id', 'desc')
+            ->first();
+    }
+
     public static function showCustomer($id)
     {
         static $cache = array();

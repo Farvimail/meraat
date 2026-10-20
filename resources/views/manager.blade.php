@@ -526,6 +526,7 @@ use Illuminate\Support\Facades\Auth;
                                                     <button class="nav-link" id="nav-points-tab-{{$item->customer_id}}" data-bs-toggle="tab" data-bs-target="#nav-points-{{$item->customer_id}}" type="button" role="tab" aria-controls="nav-points" aria-selected="true">امتیاز</button>
                                                     <button class="nav-link" id="nav-bank-tab-{{$item->customer_id}}" data-bs-toggle="tab" data-bs-target="#nav-bank-{{$item->customer_id}}" type="button" role="tab" aria-controls="nav-bank" aria-selected="false">بانک</button>
                                                     <button class="nav-link" id="nav-contact-tab-{{$item->customer_id}}" data-bs-toggle="tab" data-bs-target="#nav-contact-{{$item->customer_id}}" type="button" role="tab" aria-controls="nav-contact" aria-selected="false">تماس</button>
+                                                    <button class="nav-link" id="nav-edit-tab-{{$item->customer_id}}" data-bs-toggle="tab" data-bs-target="#nav-edit-{{$item->customer_id}}" type="button" role="tab" aria-controls="nav-edit" aria-selected="false">ویرایش</button>
                                                     <button class="nav-link active" id="nav-presents-tab-{{$item->customer_id}}" data-bs-toggle="tab" data-bs-target="#nav-presents-{{$item->customer_id}}" type="button" role="tab" aria-controls="nav-presents" aria-selected="false">حضور</button>
                                                 </div>
                                             </nav>
@@ -616,6 +617,54 @@ use Illuminate\Support\Facades\Auth;
                                                         @endif
                                                         <input type="submit" style="background:transparent; border:none" class="" value="ذخیره" />
                                                     </form>
+                                                </div>
+                                                <div class="tab-pane fade" id="nav-edit-{{$item->customer_id}}" role="tabpanel" aria-labelledby="nav-edit-tab-{{$item->customer_id}}">
+                                                    {{-- خطاهای اعتبارسنجی فقط روی کارتِ همان کارمندی می‌نشیند که
+                                                         فرمش رد شده (`old('customer_id')`)، وگرنه پیامِ یک کارمند
+                                                         روی تبِ ویرایشِ همهٔ کارت‌ها تکرار می‌شد. پیش از این هیچ
+                                                         خطایی نشان داده نمی‌شد: ذخیره بی‌صدا رد می‌شد و بعد از
+                                                         رفرش همان مقدارهای قبلی می‌ماند — دقیقاً همان چیزی که
+                                                         «تغییر دادم ولی عوض نشد» به نظر می‌رسید. --}}
+                                                    @php($credsFailed = old('customer_id') !== null && (int) old('customer_id') === (int) $item->customer_id)
+                                                    <form action="{{ route('customer.credentials') }}" method="post" autocomplete="off">
+                                                        @csrf
+                                                        <input type="hidden" name="customer_id" value="{{$item->customer_id}}"/>
+                                                        @if ($credsFailed && $errors->any())
+                                                            <div class="alert alert-danger py-2 px-3 small" role="alert">
+                                                                @foreach ($errors->all() as $message)
+                                                                    <div>{{ $message }}</div>
+                                                                @endforeach
+                                                            </div>
+                                                        @endif
+                                                        <div class="input-group mb-3">
+                                                            <input type="email" class="form-control" name="email" placeholder="اینجا وارد کنید" aria-label="ایمیل" autocomplete="new-password"
+                                                                   value="{{ $credsFailed ? old('email') : AppendCustomerController::showCustomer($item->customer_id)->email }}">
+                                                            <span class="input-group-text">ایمیل</span>
+                                                        </div>
+                                                        <div class="input-group mb-3">
+                                                            <input type="password" class="form-control" name="password" placeholder="خالی بگذارید اگر نمی‌خواهید عوض شود" aria-label="پسورد جدید" autocomplete="new-password">
+                                                            <span class="input-group-text">پسورد جدید (حداقل ۶)</span>
+                                                        </div>
+                                                        <input type="submit" style="background:transparent; border:none" class="" value="ذخیره" />
+                                                    </form>
+                                                    @php($device = AppendCustomerController::activeDevice($item->customer_id))
+                                                    <div class="border rounded p-3 mt-3">
+                                                        <div class="d-flex justify-content-between align-items-center">
+                                                            <span>گوشیِ بسته‌شده</span>
+                                                            @if($device)
+                                                                <form action="{{ route('customer.device.release') }}" method="post" class="m-0">
+                                                                    @csrf
+                                                                    <input type="hidden" name="customer_id" value="{{$item->customer_id}}"/>
+                                                                    <button type="submit" class="btn btn-sm btn-outline-danger">آزاد کردن گوشی</button>
+                                                                </form>
+                                                            @endif
+                                                        </div>
+                                                        @if($device)
+                                                            <div class="small text-muted mt-2">{{$device->device_name ?: 'گوشی'}} — {{$device->platform ?: 'نامشخص'}} — بسته‌شده در {{$device->bound_at}}</div>
+                                                        @else
+                                                            <div class="small text-muted mt-2">گوشی‌ای به این کارمند بسته نشده است.</div>
+                                                        @endif
+                                                    </div>
                                                 </div>
                                                 <div class="tab-pane fade col-12 show active" id="nav-presents-{{$item->customer_id}}" role="tabpanel" aria-labelledby="nav-presents-tab-{{$item->customer_id}}">
                                                     <div class="inverse-timer cc_cursor">

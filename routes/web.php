@@ -15,11 +15,18 @@ Auth::routes();
 
 Route::get('/login/admin', 'Auth\LoginController@showAdminLoginForm');
 Route::get('/login/manager', 'Auth\LoginController@showManagerLoginForm')->name('login.manager');
+
+// همان فرمِ ورودِ میزکار، با نشانیِ کوتاه‌ترِ `/manager/login`.
+// چرا هر دو: `/login/manager` در لینک‌های قبلی و در مستندات هست و نباید بشکند؛
+// `/manager/login` نشانی‌ای است که مدیر به‌خاطر می‌سپارد، چون از همان‌جا وارد
+// می‌شود و پسوردش را عوض می‌کند.
+Route::get('/manager/login', 'Auth\LoginController@showManagerLoginForm')->name('manager.login');
 Route::get('/register/admin', 'Auth\RegisterController@showAdminRegisterForm');
 Route::get('/register/manager', 'Auth\RegisterController@showManagerRegisterForm')->name('register.manager');
 
 Route::post('/login/admin', 'Auth\LoginController@adminLogin');
 Route::post('/login/manager', 'Auth\LoginController@ManagerLogin');
+Route::post('/manager/login', 'Auth\LoginController@ManagerLogin');
 Route::post('/register/admin', 'Auth\RegisterController@createAdmin');
 Route::post('/register/manager', 'Auth\RegisterController@createManager');
 
@@ -39,6 +46,14 @@ Route::post('/points/customer/save','CustomerPointController@save')->name('save.
 Route::post('/roles/update','RolesController@update')->name('update.roles');
 Route::post('/customer/create','CustomerController@create')->name('create.customer');
 Route::post('/customer/update','CustomerController@update')->name('update.customer');
+// تب «ویرایش» پنل مدیر: تغییر ایمیل و پسورد خودِ کارمند. پشتِ گارد مدیر،
+// چون به رمزِ عبورِ کاربران دست می‌زند و نباید بدون نشست در دسترس باشد.
+Route::post('/customer/credentials','CustomerController@credentials')
+    ->name('customer.credentials')->middleware('auth:manager');
+// «آزاد کردن گوشی» از همان تبِ ویرایش — وقتی کارمند اپ را دوباره نصب کرده
+// و شناسهٔ نصب عوض شده، ورودش با device_already_bound رد می‌شود.
+Route::post('/customer/device/release','CustomerController@releaseDevice')
+    ->name('customer.device.release')->middleware('auth:manager');
 
 Route::get('/time/now','CalendarController@show')->name('now');
 Route::get('/present/start', 'SavedTimeController@start')->name('start.savetime');
@@ -50,11 +65,40 @@ Route::get('/read/timer','TimerController@show');
 // بدون رفرشِ دستی و بدون یک درخواست سنگین برای هر کارت در پنل دیده شود.
 Route::get('/read/timer-revision','TimerController@revision');
 
-// کدهای QR تأییدِ حضور برای پنل (نشستِ مدیر) و ثبتِ تأییدِ دستیِ مدیر.
-// GET است تا درخواستِ دوره‌ایِ پنل با همان چیزی که هست ساده بماند و کدهای
-// کوتاه‌عمر در کش نیفتند؛ احراز هویت داخلِ خودِ کنترلر است.
+// کدهای QR تأییدِ حضور + ثبتِ تأییدِ دستیِ مدیر.
+//
+// `codes` عمداً بدونِ گارد است: کد هر کارمند ثابت و مخصوصِ خودش است و روی
+// کارتِ او در صفحهٔ حضور برای همه دیده می‌شود؛ بعد از حذفِ دکمهٔ «پنل مدیریت»
+// از آن صفحه، کارمند باید بتواند QR خودش را بی‌آنکه مدیری وارد شده باشد
+// ببیند. وضعیتِ تأییدِ امروز و ثبتِ دستی همچنان پشتِ نشستِ مدیر است (داخلِ
+// کنترلر سنجیده می‌شود). GET است تا درخواست ساده بماند.
 Route::get('/read/qr-codes','PresenceQrController@codes');
 Route::post('/read/qr-confirm-manual','PresenceQrController@manual');
+
+/*
+|--------------------------------------------------------------------------
+| دانلودِ اپلیکیشن (صفحهٔ عمومی)
+|--------------------------------------------------------------------------
+| صفحهٔ راهنما + QRِ لینک، و تحویلِ خودِ فایلِ نصبی. عمداً بدونِ نشست: کسی که
+| می‌خواهد اپ را نصب کند هنوز هیچ حسابی روی گوشی‌اش ندارد و از همین صفحه
+| شروع می‌کند.
+*/
+Route::get('/app', 'AppDownloadController@page')->name('app.download.page');
+Route::get('/app/download', 'AppDownloadController@download')->name('app.download');
+// فقط وقتی فایل بیرون از public/ باشد استفاده می‌شود (مسیرِ سفارشی).
+Route::get('/app/stream', 'AppDownloadController@stream');
+
+/*
+|--------------------------------------------------------------------------
+| حسابِ خودِ مدیر (تغییر رمز عبور)
+|--------------------------------------------------------------------------
+| مدیر از `/manager/login` وارد می‌شود و اگر رمزش را عوض کند همین‌جا می‌ماند.
+| صفحه بدونِ گارد است ولی خودش نشست را می‌سنجد و بی‌نشست‌ها را به فرمِ ورودِ
+| میزکار می‌فرستد — با گارد، لاراول به فرمِ ورودِ *مشتری* می‌فرستاد.
+*/
+Route::get('/manager/password', 'ManagerAccountController@edit')->name('manager.password');
+Route::post('/manager/password', 'ManagerAccountController@update')
+    ->middleware('auth:manager');
 
 Route::get('/past/day', 'TimerController@pastDays');
 
